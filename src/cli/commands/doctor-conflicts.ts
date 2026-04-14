@@ -10,6 +10,7 @@ import { isOmcHook } from '../../installer/index.js';
 import { colors } from '../utils/formatting.js';
 import { listBuiltinSkillNames } from '../../features/builtin-skills/skills.js';
 import { inspectUnifiedMcpRegistrySync } from '../../installer/mcp-registry.js';
+import { getRegisteredTypes, isBuiltinType, isCliAvailable, type CliAgentType } from '../../team/model-contract.js';
 
 export interface ConflictReport {
   hookConflicts: { event: string; command: string; isOmc: boolean }[];
@@ -17,6 +18,7 @@ export interface ConflictReport {
   legacySkills: { name: string; path: string }[];
   envFlags: { disableOmc: boolean; skipHooks: string[] };
   configIssues: { unknownFields: string[] };
+  cliPlugins: { types: string[]; builtin: { type: string; available: boolean }[]; plugins: { type: string; binary: string; available: boolean }[] };
   mcpRegistrySync: ReturnType<typeof inspectUnifiedMcpRegistrySync>;
   hasConflicts: boolean;
 }
@@ -309,6 +311,37 @@ export function checkConfigIssues(): ConflictReport['configIssues'] {
 }
 
 /**
+ * Check CLI agent availability for both built-in and plugin types.
+ */
+export function checkCliPlugins(): ConflictReport['cliPlugins'] {
+  const types = getRegisteredTypes();
+  const builtin: ConflictReport['cliPlugins']['builtin'] = [];
+  const plugins: ConflictReport['cliPlugins']['plugins'] = [];
+
+  // Eagerly load plugins
+  try {
+    const { ensurePluginsLoaded } = require('../../plugins/index.js') as { ensurePluginsLoaded: () => void };
+    ensurePluginsLoaded();
+  } catch { /* plugins module not available */ }
+
+  for (const type of getRegisteredTypes()) {
+    const available = (() => {
+      try { return isCliAvailable(type as CliAgentType); } catch { return false; }
+    })();
+
+    if (isBuiltinType(type)) {
+      builtin.push({ type, available });
+    } else {
+      const { getContract } = require('../../team/model-contract.js') as { getContract: (t: string) => { binary: string } };
+      const binary = (() => { try { return getContract(type).binary; } catch { return 'unknown'; } })();
+      plugins.push({ type, binary, available });
+    }
+  }
+
+  return { types, builtin, plugins };
+}
+
+/**
  * Run complete conflict check
  */
 export function runConflictCheck(): ConflictReport {
@@ -317,6 +350,7 @@ export function runConflictCheck(): ConflictReport {
   const legacySkills = checkLegacySkills();
   const envFlags = checkEnvFlags();
   const configIssues = checkConfigIssues();
+  const cliPlugins = checkCliPlugins();
   const mcpRegistrySync = inspectUnifiedMcpRegistrySync();
 
   // Determine if there are actual conflicts
@@ -338,6 +372,7 @@ export function runConflictCheck(): ConflictReport {
     legacySkills,
     envFlags,
     configIssues,
+    cliPlugins,
     mcpRegistrySync,
     hasConflicts
   };
@@ -443,6 +478,23 @@ export function formatReport(report: ConflictReport, json: boolean): string {
     }
     lines.push('');
   }
+
+  // CLI Agents (built-in + plugins)
+  lines.push(colors.bold('🤖 CLI Agents'));
+  lines.push('');
+  for (const item of report.cliPlugins.builtin) {
+    const status = item.available ? colors.green('✓') : colors.red('✗');
+    lines.push(`  ${status} ${item.type.padEnd(12)} ${colors.gray('built-in')}`);
+  }
+  if (report.cliPlugins.plugins.length > 0) {
+    for (const item of report.cliPlugins.plugins) {
+      const status = item.available ? colors.green('✓') : colors.yellow('⚠');
+      lines.push(`  ${status} ${item.type.padEnd(12)} ${colors.gray(`plugin (${item.binary})`)}`);
+    }
+  } else {
+    lines.push(`  ${colors.gray('No CLI plugins installed')}`);
+  }
+  lines.push('');
 
   // Unified MCP registry sync
   lines.push(colors.bold('🧩 Unified MCP Registry'));
