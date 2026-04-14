@@ -7,7 +7,9 @@ const availability = vi.hoisted(() => ({
 }));
 
 vi.mock('../team/model-contract.js', () => ({
-  isCliAvailable: (agentType: 'claude' | 'codex' | 'gemini') => availability[agentType],
+  isCliAvailable: (agentType: string) => availability[agentType as keyof typeof availability],
+  getRegisteredTypes: () => ['claude', 'codex', 'gemini'],
+  isBuiltinType: (type: string) => ['claude', 'codex', 'gemini'].includes(type),
 }));
 
 import { clearSkillsCache, getBuiltinSkill } from '../features/builtin-skills/skills.js';

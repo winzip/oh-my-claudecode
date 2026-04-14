@@ -7,7 +7,9 @@ const availability = vi.hoisted(() => ({
 }));
 
 vi.mock('../team/model-contract.js', () => ({
-  isCliAvailable: (agentType: 'claude' | 'codex' | 'gemini') => availability[agentType],
+  isCliAvailable: (agentType: string) => availability[agentType as keyof typeof availability],
+  getRegisteredTypes: () => ['claude', 'codex', 'gemini'],
+  isBuiltinType: (type: string) => ['claude', 'codex', 'gemini'].includes(type),
 }));
 
 import {
@@ -75,7 +77,7 @@ describe('runtime-guidance: ralplan/plan/ralph Codex availability', () => {
 
   describe('detectSkillRuntimeAvailability safety', () => {
     it('returns false for a provider whose detector throws instead of crashing', () => {
-      const throwingDetector = (agentType: 'claude' | 'codex' | 'gemini') => {
+      const throwingDetector = (agentType: string) => {
         if (agentType === 'codex') {
           throw new Error(
             'External LLM provider "codex" is blocked by security policy (disableExternalLLM).',

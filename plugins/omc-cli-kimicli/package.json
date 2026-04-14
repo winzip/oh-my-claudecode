@@ -1,0 +1,11 @@
+{
+  "name": "omc-cli-kimicli",
+  "version": "0.1.0",
+  "description": "OMC CLI plugin for Kimi CLI (Moonshot AI)",
+  "main": "index.js",
+  "omc": {
+    "agentType": "kimicli"
+  },
+  "keywords": ["omc-cli", "kimi", "moonshot", "cli-plugin"],
+  "license": "MIT"
+}

@@ -58,7 +58,7 @@ import type { CliAgentType } from './model-contract.js';
 import {
   buildWorkerArgv, resolveValidatedBinaryPath,
   getWorkerEnv as getModelWorkerEnv, isPromptModeAgent, getPromptModeArgs,
-  resolveClaudeWorkerModel,
+  resolveClaudeWorkerModel, getContract,
 } from './model-contract.js';
 import {
   createTeamSession, spawnWorkerInPane, sendToWorker,
@@ -443,15 +443,12 @@ async function spawnV2Worker(opts: SpawnV2WorkerOptions): Promise<SpawnV2WorkerR
   // Resolve model from environment variables.
   // For Claude agents on Bedrock/Vertex, resolve the provider-specific model
   // so workers don't fall back to invalid Anthropic API model names. (#1695)
+  const contract = getContract(opts.agentType);
   const modelForAgent = (() => {
-    if (opts.agentType === 'codex') {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL
-        || process.env.OMC_CODEX_DEFAULT_MODEL
-        || undefined;
-    }
-    if (opts.agentType === 'gemini') {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL
-        || process.env.OMC_GEMINI_DEFAULT_MODEL
+    if (contract.hints?.modelEnvPrefix) {
+      const envFallback = `OMC_EXTERNAL_MODELS_DEFAULT_${contract.hints.modelEnvPrefix.replace('OMC_', '')}_MODEL`;
+      return process.env[envFallback]
+        || process.env[`${contract.hints.modelEnvPrefix}_DEFAULT_MODEL`]
         || undefined;
     }
     // Claude agents: resolve Bedrock/Vertex model when on those providers
@@ -514,7 +511,7 @@ async function spawnV2Worker(opts: SpawnV2WorkerOptions): Promise<SpawnV2WorkerR
       if (usePromptMode) {
         return { ok: true, transport: 'prompt_stdin', reason: 'prompt_mode_launch_args' };
       }
-      if (opts.agentType === 'gemini') {
+      if (contract.hints?.needsTrustConfirm) {
         const confirmed = await notifyPaneWithRetry(opts.sessionName, paneId, '1');
         if (!confirmed) {
           return { ok: false, transport: 'tmux_send_keys', reason: 'worker_notify_failed:trust-confirm' };
@@ -535,7 +532,7 @@ async function spawnV2Worker(opts: SpawnV2WorkerOptions): Promise<SpawnV2WorkerR
     };
   }
 
-  if (opts.agentType === 'claude') {
+  if (contract.hints?.startupWaitStrategy === 'evidence-file') {
     const settled = await waitForWorkerStartupEvidence(
       opts.teamName,
       opts.workerName,

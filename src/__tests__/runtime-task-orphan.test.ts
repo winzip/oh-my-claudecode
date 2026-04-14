@@ -25,6 +25,7 @@ vi.mock('../team/model-contract.js', () => ({
   isPromptModeAgent: vi.fn(() => false),
   getPromptModeArgs: vi.fn(() => []),
   resolveClaudeWorkerModel: vi.fn(() => undefined),
+  getContract: (agentType: string) => ({ agentType, binary: agentType, hints: {} }),
 }));
 
 vi.mock('../team/tmux-session.js', () => ({

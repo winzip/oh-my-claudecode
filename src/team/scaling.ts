@@ -40,7 +40,7 @@ import { TeamPaths, absPath } from './state-paths.js';
 // ── Environment gate ──────────────────────────────────────────────────────────
 
 const OMC_TEAM_SCALING_ENABLED_ENV = 'OMC_TEAM_SCALING_ENABLED';
-const CLI_AGENT_TYPES = new Set<CliAgentType>(['claude', 'codex', 'gemini']);
+const BUILTIN_CLI_AGENT_TYPES = new Set<string>(['claude', 'codex', 'gemini']);
 
 export function isScalingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   const raw = env[OMC_TEAM_SCALING_ENABLED_ENV];
@@ -58,13 +58,11 @@ function assertScalingEnabled(env: NodeJS.ProcessEnv = process.env): void {
 }
 
 function asCliAgentType(agentType: string): CliAgentType {
-  if (CLI_AGENT_TYPES.has(agentType as CliAgentType)) {
+  if (BUILTIN_CLI_AGENT_TYPES.has(agentType)) {
     return agentType as CliAgentType;
   }
-
-  throw new Error(
-    `Unknown agent type: ${agentType}. Supported: ${Array.from(CLI_AGENT_TYPES).join(', ')}`,
-  );
+  // Accept plugin-registered types too
+  return agentType as CliAgentType;
 }
 
 // ── Result types ──────────────────────────────────────────────────────────────

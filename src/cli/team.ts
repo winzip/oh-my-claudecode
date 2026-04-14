@@ -15,6 +15,16 @@ import { getGlobalOmcStatePath } from '../utils/paths.js';
 
 const JOB_ID_PATTERN = /^omc-[a-z0-9]{1,16}$/;
 const VALID_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
+
+function isValidCliAgentType(token: string): boolean {
+  if (VALID_CLI_AGENT_TYPES.has(token)) return true;
+  try {
+    const { getRegisteredTypes } = require('../plugins/index.js') as { getRegisteredTypes: () => string[] };
+    return getRegisteredTypes().includes(token);
+  } catch {
+    return false;
+  }
+}
 const SUBCOMMANDS = new Set(['start', 'status', 'wait', 'cleanup', 'resume', 'shutdown', 'api', 'help', '--help', '-h']);
 
 const SUPPORTED_API_OPERATIONS = new Set([
@@ -304,7 +314,7 @@ function toInt(value: string, flag: string): number {
 function normalizeAgentType(value: string): string {
   const normalized = value.trim().toLowerCase();
   if (!normalized) throw new Error('Agent type cannot be empty');
-  if (!VALID_CLI_AGENT_TYPES.has(normalized)) {
+  if (!isValidCliAgentType(normalized)) {
     throw new Error(`Unsupported agent type: ${value}`);
   }
   return normalized;

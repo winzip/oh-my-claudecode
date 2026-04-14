@@ -1446,5 +1446,13 @@ export function buildProgram(): Command {
 // and child processes inherit VITEST from the parent vitest worker, which
 // would cause the CLI to silently exit with no output.
 if (!process.env.OMC_CLI_SKIP_PARSE) {
+  // Eagerly load CLI plugins before any team/detection code runs.
+  // This prevents temporal coupling where CONTRACTS iteration misses plugin entries.
+  try {
+    const { ensurePluginsLoaded } = require('../plugins/index.js') as { ensurePluginsLoaded: () => void };
+    ensurePluginsLoaded();
+  } catch {
+    // Plugin loader not available — built-in CLIs only
+  }
   program.parse();
 }

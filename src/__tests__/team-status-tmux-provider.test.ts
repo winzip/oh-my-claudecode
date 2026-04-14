@@ -14,8 +14,8 @@ describe('BUG 6: team-status provider type for tmux workers', () => {
 
     // Should use a regex that strips both prefixes
     expect(source).toMatch(/replace\(.*mcp.*tmux/s);
-    // Should include 'claude' in the provider union type
-    expect(source).toContain("'claude'");
+    // Provider type is now `string` to support plugin CLIs
+    expect(source).toContain('provider: string');
   });
 
   it('WorkerStatus interface includes claude in provider union', async () => {
@@ -26,14 +26,13 @@ describe('BUG 6: team-status provider type for tmux workers', () => {
       'utf-8',
     );
 
-    // The interface should have claude in the union
+    // The interface should have a provider field (now widened to string for plugin support)
     const interfaceMatch = source.match(
       /interface WorkerStatus[\s\S]*?provider:\s*([^;]+);/,
     );
     expect(interfaceMatch).not.toBeNull();
-    expect(interfaceMatch![1]).toContain("'claude'");
-    expect(interfaceMatch![1]).toContain("'codex'");
-    expect(interfaceMatch![1]).toContain("'gemini'");
+    // Provider type is now `string` to support plugin CLIs
+    expect(interfaceMatch![1].trim()).toBe('string');
   });
 
   it('regex correctly strips mcp- prefix', () => {

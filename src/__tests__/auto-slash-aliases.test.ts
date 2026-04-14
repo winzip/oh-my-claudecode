@@ -5,6 +5,8 @@ import { tmpdir } from 'os';
 
 vi.mock('../team/model-contract.js', () => ({
   isCliAvailable: (agentType: string) => agentType === 'codex',
+  getRegisteredTypes: () => ['claude', 'codex', 'gemini'],
+  isBuiltinType: (type: string) => ['claude', 'codex', 'gemini'].includes(type),
 }));
 
 const originalCwd = process.cwd();

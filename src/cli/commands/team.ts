@@ -21,6 +21,17 @@ const MIN_WORKER_COUNT = 1;
 const MAX_WORKER_COUNT = 20;
 const VALID_TEAM_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
 
+function isValidAgentType(token: string): boolean {
+  if (VALID_TEAM_CLI_AGENT_TYPES.has(token)) return true;
+  // Check plugin-registered types
+  try {
+    const { getRegisteredTypes } = require('../../plugins/index.js') as { getRegisteredTypes: () => string[] };
+    return getRegisteredTypes().includes(token);
+  } catch {
+    return false;
+  }
+}
+
 const TEAM_HELP = `
 Usage: omc team [N:agent-type[:role]] [--new-window] "<task description>"
        omc team status <team-name>
@@ -307,7 +318,7 @@ function normalizeWorkerSpecSegment(match: RegExpMatchArray): NormalizedWorkerSp
     return { count, agentType: token, role: explicitRole };
   }
 
-  if (VALID_TEAM_CLI_AGENT_TYPES.has(token)) {
+  if (isValidAgentType(token)) {
     return { count, agentType: token };
   }
 

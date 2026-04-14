@@ -187,9 +187,12 @@ export type {
 
 // New tmux-based multi-CLI team modules
 // model-contract: getWorkerEnv is exported via worker-bootstrap (single source of truth)
-export type { CliAgentType, CliAgentContract, WorkerLaunchConfig } from './model-contract.js';
+export type { BuiltinCliAgentType, CliAgentType, CliAgentContract, WorkerLaunchConfig, RuntimeBehaviorHints } from './model-contract.js';
 export {
   getContract,
+  isBuiltinType,
+  getRegisteredTypes,
+  registerContract,
   isCliAvailable as isCliAvailableForAgent,
   validateCliAvailable as validateCliAvailableForAgent,
   buildLaunchArgs,

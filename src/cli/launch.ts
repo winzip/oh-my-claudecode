@@ -555,6 +555,14 @@ export function parsePluginDirArg(args: string[]): string | null {
 }
 
 export async function launchCommand(args: string[]): Promise<void> {
+  // Eagerly load CLI plugins before any team/detection code runs.
+  try {
+    const { ensurePluginsLoaded } = require('../plugins/index.js') as { ensurePluginsLoaded: () => void };
+    ensurePluginsLoaded();
+  } catch {
+    // Plugin loader not available — built-in CLIs only
+  }
+
   // Capture --plugin-dir <path> so the HUD wrapper (and any other env-aware
   // child of Claude Code) can resolve the active plugin root via OMC_PLUGIN_ROOT.
   // Non-consuming: the flag still flows through to Claude Code untouched.

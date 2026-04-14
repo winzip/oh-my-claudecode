@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { spawnSync } from 'child_process';
 import {
   getContract,
+  registerContract,
   buildLaunchArgs,
   buildWorkerArgv,
   getWorkerEnv,
@@ -110,13 +111,21 @@ describe('model-contract', () => {
       expect(() => getContract('unknown' as any)).toThrow('Unknown agent type');
     });
 
-    it('blocks codex when external LLM is disabled', async () => {
+    it('blocks plugin types when external LLM is disabled', async () => {
       const origSecurity = process.env.OMC_SECURITY;
       process.env.OMC_SECURITY = 'strict';
+      // Register a non-builtin plugin type
+      registerContract({
+        agentType: 'test-external-cli',
+        binary: 'test-external-cli',
+        installInstructions: 'test',
+        buildLaunchArgs: () => [],
+        parseOutput: (s: string) => s,
+      });
       try {
         const { clearSecurityConfigCache } = await import('../../lib/security-config.js');
         clearSecurityConfigCache();
-        expect(() => getContract('codex')).toThrow('blocked by security policy');
+        expect(() => getContract('test-external-cli')).toThrow('blocked by security policy');
       } finally {
         if (origSecurity === undefined) {
           delete process.env.OMC_SECURITY;
@@ -128,13 +137,15 @@ describe('model-contract', () => {
       }
     });
 
-    it('blocks gemini when external LLM is disabled', async () => {
+    it('allows builtin types (gemini) when external LLM is disabled', async () => {
+      // Builtin types (claude, codex, gemini) are always allowed —
+      // only plugin/non-builtin types are blocked.
       const origSecurity = process.env.OMC_SECURITY;
       process.env.OMC_SECURITY = 'strict';
       try {
         const { clearSecurityConfigCache } = await import('../../lib/security-config.js');
         clearSecurityConfigCache();
-        expect(() => getContract('gemini')).toThrow('blocked by security policy');
+        expect(() => getContract('gemini')).not.toThrow();
       } finally {
         if (origSecurity === undefined) {
           delete process.env.OMC_SECURITY;

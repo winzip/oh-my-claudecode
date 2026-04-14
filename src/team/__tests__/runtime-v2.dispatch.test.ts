@@ -49,6 +49,14 @@ vi.mock('../model-contract.js', () => ({
   isPromptModeAgent: modelContractMocks.isPromptModeAgent,
   getPromptModeArgs: modelContractMocks.getPromptModeArgs,
   resolveClaudeWorkerModel: vi.fn(() => undefined),
+  getContract: (agentType: string) => {
+    const hints: Record<string, object> = {
+      claude: { startupWaitStrategy: 'evidence-file' },
+      codex: { modelEnvPrefix: 'OMC_CODEX', startupWaitStrategy: 'prompt-mode' },
+      gemini: { needsTrustConfirm: true, modelEnvPrefix: 'OMC_GEMINI', startupWaitStrategy: 'prompt-mode' },
+    };
+    return { agentType, binary: agentType, hints: hints[agentType] };
+  },
 }));
 
 vi.mock('../tmux-session.js', () => ({

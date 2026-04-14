@@ -1,7 +1,8 @@
 // Re-exports from model-contract.ts for backward compatibility
 // and additional CLI detection utilities
-export { isCliAvailable, validateCliAvailable, getContract, type CliAgentType } from './model-contract.js';
+export { isCliAvailable, validateCliAvailable, getContract, getRegisteredTypes, type CliAgentType } from './model-contract.js';
 import { spawnSync } from 'child_process';
+import { getContract, getRegisteredTypes } from './model-contract.js';
 
 export interface CliInfo {
   available: boolean;
@@ -31,9 +32,10 @@ export function detectCli(binary: string): CliInfo {
 }
 
 export function detectAllClis(): Record<string, CliInfo> {
-  return {
-    claude: detectCli('claude'),
-    codex: detectCli('codex'),
-    gemini: detectCli('gemini'),
-  };
+  const result: Record<string, CliInfo> = {};
+  for (const type of getRegisteredTypes()) {
+    const contract = getContract(type);
+    result[type] = detectCli(contract.binary);
+  }
+  return result;
 }
