@@ -1,9 +1,13 @@
 import { spawnSync } from 'child_process';
+import { createRequire } from 'node:module';
 import { isAbsolute, normalize, win32 as win32Path } from 'path';
 import { validateTeamName } from './team-name.js';
 import { normalizeToCcAlias } from '../features/delegation-enforcer.js';
 import { isBedrock, isVertexAI, isProviderSpecificModelId } from '../config/models.js';
 import { isExternalLLMDisabled } from '../lib/security-config.js';
+
+// CJS require bound to this module for dynamic plugin loading (avoids circular deps)
+const cjsRequire = createRequire(import.meta.url);
 
 export type BuiltinCliAgentType = 'claude' | 'codex' | 'gemini';
 export type CliAgentType = BuiltinCliAgentType | (string & {});
@@ -247,9 +251,8 @@ export function getContract(agentType: CliAgentType): CliAgentContract {
   if (!contract && !isBuiltinType(agentType)) {
     // Lazy load plugins on first unknown type request
     try {
-      // Dynamic require to avoid circular dependency at module load time
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pluginModule = require('../plugins/index.js') as { ensurePluginsLoaded?: () => void };
+      // Dynamic require via createRequire to avoid circular dependency at module load time
+      const pluginModule = cjsRequire('../plugins/index.js') as { ensurePluginsLoaded?: () => void };
       pluginModule.ensurePluginsLoaded?.();
     } catch {
       // Plugin loader not available — proceed with built-ins only

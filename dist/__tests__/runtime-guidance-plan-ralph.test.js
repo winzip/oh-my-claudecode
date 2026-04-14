@@ -6,6 +6,8 @@ const availability = vi.hoisted(() => ({
 }));
 vi.mock('../team/model-contract.js', () => ({
     isCliAvailable: (agentType) => availability[agentType],
+    getRegisteredTypes: () => ['claude', 'codex', 'gemini'],
+    isBuiltinType: (type) => ['claude', 'codex', 'gemini'].includes(type),
 }));
 import { detectSkillRuntimeAvailability, renderSkillRuntimeGuidance, } from '../features/builtin-skills/runtime-guidance.js';
 describe('runtime-guidance: ralplan/plan/ralph Codex availability', () => {

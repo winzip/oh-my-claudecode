@@ -2,7 +2,7 @@ import type { HeartbeatData, TaskFile, OutboxMessage } from './types.js';
 import { generateUsageReport } from './usage-tracker.js';
 export interface WorkerStatus {
     workerName: string;
-    provider: 'claude' | 'codex' | 'gemini';
+    provider: string;
     heartbeat: HeartbeatData | null;
     isAlive: boolean;
     currentTask: TaskFile | null;

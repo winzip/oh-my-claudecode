@@ -25,7 +25,7 @@ export { generateTeamReport, saveTeamReport } from './summary-report.js';
 export { isPathAllowed, isCommandAllowed, formatPermissionInstructions, getDefaultPermissions, } from './permissions.js';
 export { TeamPaths, absPath, teamStateRoot } from './state-paths.js';
 export { checkSentinelReadiness, waitForSentinelReadiness, } from './sentinel-gate.js';
-export { getContract, isCliAvailable as isCliAvailableForAgent, validateCliAvailable as validateCliAvailableForAgent, buildLaunchArgs, buildWorkerCommand, parseCliOutput, 
+export { getContract, isBuiltinType, getRegisteredTypes, registerContract, isCliAvailable as isCliAvailableForAgent, validateCliAvailable as validateCliAvailableForAgent, buildLaunchArgs, buildWorkerCommand, parseCliOutput, 
 // Deprecated backward-compat exports kept for downstream consumers.
 shouldLoadShellRc, validateCliBinaryPath, resolveCliBinaryPath, clearResolvedPathCache, } from './model-contract.js';
 export { detectCli, detectAllClis } from './cli-detection.js';

@@ -1,4 +1,15 @@
-export type CliAgentType = 'claude' | 'codex' | 'gemini';
+export type BuiltinCliAgentType = 'claude' | 'codex' | 'gemini';
+export type CliAgentType = BuiltinCliAgentType | (string & {});
+export interface RuntimeBehaviorHints {
+    /** Env var prefix for model resolution (e.g., 'OMC_CODEX' for OMC_CODEX_DEFAULT_MODEL) */
+    modelEnvPrefix?: string;
+    /** Whether this CLI needs trust confirmation before execution */
+    needsTrustConfirm?: boolean;
+    /** Startup wait strategy: how the runtime detects worker readiness */
+    startupWaitStrategy?: 'evidence-file' | 'prompt-mode' | 'none';
+    /** Override for agent type guidance text shown to worker */
+    workerGuidanceOverride?: string;
+}
 export interface CliAgentContract {
     agentType: CliAgentType;
     binary: string;
@@ -9,6 +20,8 @@ export interface CliAgentContract {
     supportsPromptMode?: boolean;
     /** CLI flag for prompt mode (e.g., '-i' for gemini) */
     promptModeFlag?: string;
+    /** Behavioral hints for runtime specialization */
+    hints?: RuntimeBehaviorHints;
 }
 export interface WorkerLaunchConfig {
     teamName: string;
@@ -42,6 +55,9 @@ export declare const _testInternals: {
     UNTRUSTED_PATH_PATTERNS: RegExp[];
     getTrustedPrefixes: typeof getTrustedPrefixes;
 };
+export declare function isBuiltinType(type: string): boolean;
+export declare function registerContract(contract: CliAgentContract): void;
+export declare function getRegisteredTypes(): string[];
 export declare function getContract(agentType: CliAgentType): CliAgentContract;
 export declare function isCliAvailable(agentType: CliAgentType): boolean;
 export declare function validateCliAvailable(agentType: CliAgentType): void;

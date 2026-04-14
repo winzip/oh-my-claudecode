@@ -35,6 +35,7 @@ vi.mock('../../cli/tmux-utils.js', () => ({
 vi.mock('../model-contract.js', () => ({
     buildWorkerArgv: modelContractMocks.buildWorkerArgv,
     getWorkerEnv: modelContractMocks.getWorkerEnv,
+    getContract: (agentType) => ({ agentType, binary: agentType, hints: {} }),
 }));
 vi.mock('../team-ops.js', () => ({
     teamReadConfig: teamOpsMocks.teamReadConfig,

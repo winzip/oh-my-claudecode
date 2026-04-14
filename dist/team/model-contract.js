@@ -1,9 +1,12 @@
 import { spawnSync } from 'child_process';
+import { createRequire } from 'node:module';
 import { isAbsolute, normalize, win32 as win32Path } from 'path';
 import { validateTeamName } from './team-name.js';
 import { normalizeToCcAlias } from '../features/delegation-enforcer.js';
 import { isBedrock, isVertexAI, isProviderSpecificModelId } from '../config/models.js';
 import { isExternalLLMDisabled } from '../lib/security-config.js';
+// CJS require bound to this module for dynamic plugin loading (avoids circular deps)
+const cjsRequire = createRequire(import.meta.url);
 const resolvedPathCache = new Map();
 const UNTRUSTED_PATH_PATTERNS = [
     /^\/tmp(\/|$)/,
@@ -97,83 +100,100 @@ export const _testInternals = {
     UNTRUSTED_PATH_PATTERNS,
     getTrustedPrefixes,
 };
-const CONTRACTS = {
-    claude: {
-        agentType: 'claude',
-        binary: 'claude',
-        installInstructions: 'Install Claude CLI: https://claude.ai/download',
-        buildLaunchArgs(model, extraFlags = []) {
-            const args = ['--dangerously-skip-permissions'];
-            if (model) {
-                // Provider-specific model IDs (Bedrock, Vertex) must be passed as-is.
-                // Normalizing them to aliases like "sonnet" causes Claude Code to expand
-                // them to Anthropic API names (claude-sonnet-4-6) which are invalid on
-                // these providers. (issue #1695)
-                const resolved = isProviderSpecificModelId(model) ? model : normalizeToCcAlias(model);
-                args.push('--model', resolved);
-            }
-            return [...args, ...extraFlags];
-        },
-        parseOutput(rawOutput) {
-            return rawOutput.trim();
-        },
+const CONTRACTS = new Map();
+CONTRACTS.set('claude', {
+    agentType: 'claude',
+    binary: 'claude',
+    installInstructions: 'Install Claude CLI: https://claude.ai/download',
+    hints: { startupWaitStrategy: 'evidence-file' },
+    buildLaunchArgs(model, extraFlags = []) {
+        const args = ['--dangerously-skip-permissions'];
+        if (model) {
+            const resolved = isProviderSpecificModelId(model) ? model : normalizeToCcAlias(model);
+            args.push('--model', resolved);
+        }
+        return [...args, ...extraFlags];
     },
-    codex: {
-        agentType: 'codex',
-        binary: 'codex',
-        installInstructions: 'Install Codex CLI: npm install -g @openai/codex',
-        supportsPromptMode: true,
-        // Codex accepts prompt as a positional argument (no flag needed):
-        //   codex [OPTIONS] [PROMPT]
-        buildLaunchArgs(model, extraFlags = []) {
-            const args = ['--dangerously-bypass-approvals-and-sandbox'];
-            if (model)
-                args.push('--model', model);
-            return [...args, ...extraFlags];
-        },
-        parseOutput(rawOutput) {
-            // Codex outputs JSONL — extract the last assistant message
-            const lines = rawOutput.trim().split('\n').filter(Boolean);
-            for (let i = lines.length - 1; i >= 0; i--) {
-                try {
-                    const parsed = JSON.parse(lines[i]);
-                    if (parsed.type === 'message' && parsed.role === 'assistant') {
-                        return parsed.content ?? rawOutput;
-                    }
-                    if (parsed.type === 'result' || parsed.output) {
-                        return parsed.output ?? parsed.result ?? rawOutput;
-                    }
+    parseOutput(rawOutput) {
+        return rawOutput.trim();
+    },
+});
+CONTRACTS.set('codex', {
+    agentType: 'codex',
+    binary: 'codex',
+    installInstructions: 'Install Codex CLI: npm install -g @openai/codex',
+    supportsPromptMode: true,
+    hints: { modelEnvPrefix: 'OMC_CODEX', startupWaitStrategy: 'prompt-mode' },
+    buildLaunchArgs(model, extraFlags = []) {
+        const args = ['--dangerously-bypass-approvals-and-sandbox'];
+        if (model)
+            args.push('--model', model);
+        return [...args, ...extraFlags];
+    },
+    parseOutput(rawOutput) {
+        const lines = rawOutput.trim().split('\n').filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i--) {
+            try {
+                const parsed = JSON.parse(lines[i]);
+                if (parsed.type === 'message' && parsed.role === 'assistant') {
+                    return parsed.content ?? rawOutput;
                 }
-                catch {
-                    // not JSON, skip
+                if (parsed.type === 'result' || parsed.output) {
+                    return parsed.output ?? parsed.result ?? rawOutput;
                 }
             }
-            return rawOutput.trim();
-        },
+            catch {
+                // not JSON, skip
+            }
+        }
+        return rawOutput.trim();
     },
-    gemini: {
-        agentType: 'gemini',
-        binary: 'gemini',
-        installInstructions: 'Install Gemini CLI: npm install -g @google/gemini-cli',
-        supportsPromptMode: true,
-        promptModeFlag: '-i',
-        buildLaunchArgs(model, extraFlags = []) {
-            const args = ['--approval-mode', 'yolo'];
-            if (model)
-                args.push('--model', model);
-            return [...args, ...extraFlags];
-        },
-        parseOutput(rawOutput) {
-            return rawOutput.trim();
-        },
+});
+CONTRACTS.set('gemini', {
+    agentType: 'gemini',
+    binary: 'gemini',
+    installInstructions: 'Install Gemini CLI: npm install -g @google/gemini-cli',
+    supportsPromptMode: true,
+    promptModeFlag: '-i',
+    hints: { needsTrustConfirm: true, modelEnvPrefix: 'OMC_GEMINI', startupWaitStrategy: 'prompt-mode' },
+    buildLaunchArgs(model, extraFlags = []) {
+        const args = ['--approval-mode', 'yolo'];
+        if (model)
+            args.push('--model', model);
+        return [...args, ...extraFlags];
     },
-};
+    parseOutput(rawOutput) {
+        return rawOutput.trim();
+    },
+});
+export function isBuiltinType(type) {
+    return ['claude', 'codex', 'gemini'].includes(type);
+}
+export function registerContract(contract) {
+    validateBinaryRef(contract.binary);
+    CONTRACTS.set(contract.agentType, contract);
+}
+export function getRegisteredTypes() {
+    return [...CONTRACTS.keys()];
+}
 export function getContract(agentType) {
-    const contract = CONTRACTS[agentType];
-    if (!contract) {
-        throw new Error(`Unknown agent type: ${agentType}. Supported: ${Object.keys(CONTRACTS).join(', ')}`);
+    let contract = CONTRACTS.get(agentType);
+    if (!contract && !isBuiltinType(agentType)) {
+        // Lazy load plugins on first unknown type request
+        try {
+            // Dynamic require via createRequire to avoid circular dependency at module load time
+            const pluginModule = cjsRequire('../plugins/index.js');
+            pluginModule.ensurePluginsLoaded?.();
+        }
+        catch {
+            // Plugin loader not available — proceed with built-ins only
+        }
+        contract = CONTRACTS.get(agentType);
     }
-    if (agentType !== 'claude' && isExternalLLMDisabled()) {
+    if (!contract) {
+        throw new Error(`Unknown agent type: ${agentType}. Available: ${[...CONTRACTS.keys()].join(', ')}`);
+    }
+    if (!isBuiltinType(agentType) && isExternalLLMDisabled()) {
         throw new Error(`External LLM provider "${agentType}" is blocked by security policy (disableExternalLLM). ` +
             `Only Claude workers are allowed in the current security configuration.`);
     }

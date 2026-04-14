@@ -10,7 +10,8 @@ import { isOmcHook } from '../../installer/index.js';
 import { colors } from '../utils/formatting.js';
 import { listBuiltinSkillNames } from '../../features/builtin-skills/skills.js';
 import { inspectUnifiedMcpRegistrySync } from '../../installer/mcp-registry.js';
-import { getRegisteredTypes, isBuiltinType, isCliAvailable, type CliAgentType } from '../../team/model-contract.js';
+import { getRegisteredTypes, isBuiltinType, isCliAvailable, getContract, type CliAgentType } from '../../team/model-contract.js';
+import { ensurePluginsLoaded } from '../../plugins/index.js';
 
 export interface ConflictReport {
   hookConflicts: { event: string; command: string; isOmc: boolean }[];
@@ -320,7 +321,6 @@ export function checkCliPlugins(): ConflictReport['cliPlugins'] {
 
   // Eagerly load plugins
   try {
-    const { ensurePluginsLoaded } = require('../../plugins/index.js') as { ensurePluginsLoaded: () => void };
     ensurePluginsLoaded();
   } catch { /* plugins module not available */ }
 
@@ -332,7 +332,6 @@ export function checkCliPlugins(): ConflictReport['cliPlugins'] {
     if (isBuiltinType(type)) {
       builtin.push({ type, available });
     } else {
-      const { getContract } = require('../../team/model-contract.js') as { getContract: (t: string) => { binary: string } };
       const binary = (() => { try { return getContract(type).binary; } catch { return 'unknown'; } })();
       plugins.push({ type, binary, available });
     }

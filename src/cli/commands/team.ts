@@ -15,6 +15,7 @@ import {
   type TeamApiOperation,
 } from '../../team/api-interop.js';
 import type { CliAgentType } from '../../team/model-contract.js';
+import { ensurePluginsLoaded, getRegisteredTypes } from '../../plugins/index.js';
 
 const HELP_TOKENS = new Set(['--help', '-h', 'help']);
 const MIN_WORKER_COUNT = 1;
@@ -23,9 +24,8 @@ const VALID_TEAM_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
 
 function isValidAgentType(token: string): boolean {
   if (VALID_TEAM_CLI_AGENT_TYPES.has(token)) return true;
-  // Check plugin-registered types
   try {
-    const { getRegisteredTypes } = require('../../plugins/index.js') as { getRegisteredTypes: () => string[] };
+    ensurePluginsLoaded();
     return getRegisteredTypes().includes(token);
   } catch {
     return false;

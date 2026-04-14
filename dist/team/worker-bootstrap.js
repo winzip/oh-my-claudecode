@@ -28,6 +28,17 @@ function agentTypeGuidance(agentType) {
     const teamApiCommand = formatOmcCliInvocation('team api');
     const claimTaskCommand = formatOmcCliInvocation('team api claim-task');
     const transitionTaskStatusCommand = formatOmcCliInvocation('team api transition-task-status');
+    // Check for plugin-provided guidance override
+    try {
+        const { getContract } = require('./model-contract.js');
+        const contract = getContract(agentType);
+        if (contract.hints?.workerGuidanceOverride) {
+            return contract.hints.workerGuidanceOverride;
+        }
+    }
+    catch {
+        // model-contract not available (shouldn't happen, but be safe)
+    }
     switch (agentType) {
         case 'codex':
             return [
@@ -46,7 +57,7 @@ function agentTypeGuidance(agentType) {
         case 'claude':
         default:
             return [
-                '### Agent-Type Guidance (claude)',
+                `### Agent-Type Guidance (${agentType})`,
                 '- Keep reasoning focused on assigned task IDs and send concise progress acks to leader-fixed.',
                 '- Before any risky command, send a blocker/proposal message to leader-fixed and wait for updated inbox instructions.',
             ].join('\n');

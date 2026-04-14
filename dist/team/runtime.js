@@ -2,7 +2,7 @@ import { mkdir, writeFile, readFile, rm, rename } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { tmuxExecAsync } from '../cli/tmux-utils.js';
-import { buildWorkerArgv, resolveValidatedBinaryPath, getWorkerEnv as getModelWorkerEnv, isPromptModeAgent, getPromptModeArgs, resolveClaudeWorkerModel } from './model-contract.js';
+import { buildWorkerArgv, resolveValidatedBinaryPath, getWorkerEnv as getModelWorkerEnv, isPromptModeAgent, getPromptModeArgs, resolveClaudeWorkerModel, getContract } from './model-contract.js';
 import { validateTeamName } from './team-name.js';
 import { createTeamSession, spawnWorkerInPane, sendToWorker, isWorkerAlive, killTeamSession, resolveSplitPaneWorkerPaneIds, waitForPaneReady, applyMainVerticalLayout, } from './tmux-session.js';
 import { composeInitialInbox, ensureWorkerStateDir, writeWorkerOverlay, generateTriggerMessage, } from './worker-bootstrap.js';
@@ -556,15 +556,12 @@ export async function spawnWorkerForTask(runtime, workerNameValue, taskIndex) {
     // Resolve model from environment variables based on agent type.
     // For Claude agents on Bedrock/Vertex, resolve the provider-specific model
     // so workers don't fall back to invalid Anthropic API model names. (#1695)
+    const agentContract = getContract(agentType);
     const modelForAgent = (() => {
-        if (agentType === 'codex') {
-            return process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL
-                || process.env.OMC_CODEX_DEFAULT_MODEL
-                || undefined;
-        }
-        if (agentType === 'gemini') {
-            return process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL
-                || process.env.OMC_GEMINI_DEFAULT_MODEL
+        if (agentContract.hints?.modelEnvPrefix) {
+            const envFallback = `OMC_EXTERNAL_MODELS_DEFAULT_${agentContract.hints.modelEnvPrefix.replace('OMC_', '')}_MODEL`;
+            return process.env[envFallback]
+                || process.env[`${agentContract.hints.modelEnvPrefix}_DEFAULT_MODEL`]
                 || undefined;
         }
         // Claude agents: resolve Bedrock/Vertex model when on those providers
@@ -610,7 +607,7 @@ export async function spawnWorkerForTask(runtime, workerNameValue, taskIndex) {
             await resetTaskToPending(root, taskId, runtime.teamName, runtime.cwd);
             throw new Error(`worker_pane_not_ready:${workerNameValue}`);
         }
-        if (agentType === 'gemini') {
+        if (agentContract.hints?.needsTrustConfirm) {
             const confirmed = await notifyPaneWithRetry(runtime.sessionName, paneId, '1');
             if (!confirmed) {
                 await killWorkerPane(runtime, workerNameValue, paneId);

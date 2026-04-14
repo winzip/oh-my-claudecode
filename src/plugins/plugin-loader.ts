@@ -6,10 +6,14 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from 'fs';
+import { createRequire } from 'node:module';
 import { join } from 'path';
 import type { CliAgentContract } from '../team/model-contract.js';
 import type { CliPluginManifest, PluginConfig } from './types.js';
 import { registerContract } from '../team/model-contract.js';
+
+// CJS require bound to this module for loading plugin packages
+const pluginRequire = createRequire(import.meta.url);
 
 const PLUGIN_NAME_RE = /^omc-cli-/;
 const AGENT_TYPE_RE = /^[a-z][a-z0-9-]*$/;
@@ -60,8 +64,7 @@ export class PluginLoader {
 
   loadPlugin(pluginDir: string): CliAgentContract | null {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const mod = require(pluginDir);
+      const mod = pluginRequire(pluginDir);
       const contract = mod.default ?? mod;
       if (!this.validateContract(contract)) {
         console.warn(`[omc:plugins] Invalid contract from ${pluginDir} — skipping`);

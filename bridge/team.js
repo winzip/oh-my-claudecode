@@ -1,5 +1,7 @@
 var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __esm = (fn, res) => function __init() {
   return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
 };
@@ -7,6 +9,15 @@ var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
 };
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // src/team/contracts.ts
 function isTerminalTeamTaskStatus(status) {
@@ -3715,7 +3726,31 @@ var init_security_config = __esm({
 });
 
 // src/team/model-contract.ts
+var model_contract_exports = {};
+__export(model_contract_exports, {
+  _testInternals: () => _testInternals,
+  buildLaunchArgs: () => buildLaunchArgs,
+  buildWorkerArgv: () => buildWorkerArgv,
+  buildWorkerCommand: () => buildWorkerCommand,
+  clearResolvedPathCache: () => clearResolvedPathCache,
+  getContract: () => getContract,
+  getPromptModeArgs: () => getPromptModeArgs,
+  getRegisteredTypes: () => getRegisteredTypes,
+  getWorkerEnv: () => getWorkerEnv,
+  isBuiltinType: () => isBuiltinType,
+  isCliAvailable: () => isCliAvailable,
+  isPromptModeAgent: () => isPromptModeAgent,
+  parseCliOutput: () => parseCliOutput,
+  registerContract: () => registerContract,
+  resolveClaudeWorkerModel: () => resolveClaudeWorkerModel,
+  resolveCliBinaryPath: () => resolveCliBinaryPath,
+  resolveValidatedBinaryPath: () => resolveValidatedBinaryPath,
+  shouldLoadShellRc: () => shouldLoadShellRc,
+  validateCliAvailable: () => validateCliAvailable,
+  validateCliBinaryPath: () => validateCliBinaryPath
+});
 import { spawnSync as spawnSync3 } from "child_process";
+import { createRequire } from "node:module";
 import { isAbsolute as isAbsolute5, normalize as normalize2, win32 as win32Path2 } from "path";
 function getTrustedPrefixes() {
   const trusted = [
@@ -3741,6 +3776,9 @@ function assertBinaryName(binary) {
   if (!/^[A-Za-z0-9._-]+$/.test(binary)) {
     throw new Error(`Invalid CLI binary name: ${binary}`);
   }
+}
+function shouldLoadShellRc() {
+  return false;
 }
 function resolveCliBinaryPath(binary) {
   assertBinaryName(binary);
@@ -3772,12 +3810,45 @@ function resolveCliBinaryPath(binary) {
   resolvedPathCache.set(binary, resolvedPath);
   return resolvedPath;
 }
-function getContract(agentType) {
-  const contract = CONTRACTS[agentType];
-  if (!contract) {
-    throw new Error(`Unknown agent type: ${agentType}. Supported: ${Object.keys(CONTRACTS).join(", ")}`);
+function clearResolvedPathCache() {
+  resolvedPathCache.clear();
+}
+function validateCliBinaryPath(binary) {
+  try {
+    const resolvedPath = resolveCliBinaryPath(binary);
+    return { valid: true, binary, resolvedPath };
+  } catch (error) {
+    return {
+      valid: false,
+      binary,
+      reason: error instanceof Error ? error.message : String(error)
+    };
   }
-  if (agentType !== "claude" && isExternalLLMDisabled()) {
+}
+function isBuiltinType(type) {
+  return ["claude", "codex", "gemini"].includes(type);
+}
+function registerContract(contract) {
+  validateBinaryRef(contract.binary);
+  CONTRACTS.set(contract.agentType, contract);
+}
+function getRegisteredTypes() {
+  return [...CONTRACTS.keys()];
+}
+function getContract(agentType) {
+  let contract = CONTRACTS.get(agentType);
+  if (!contract && !isBuiltinType(agentType)) {
+    try {
+      const pluginModule = cjsRequire("../plugins/index.js");
+      pluginModule.ensurePluginsLoaded?.();
+    } catch {
+    }
+    contract = CONTRACTS.get(agentType);
+  }
+  if (!contract) {
+    throw new Error(`Unknown agent type: ${agentType}. Available: ${[...CONTRACTS.keys()].join(", ")}`);
+  }
+  if (!isBuiltinType(agentType) && isExternalLLMDisabled()) {
     throw new Error(
       `External LLM provider "${agentType}" is blocked by security policy (disableExternalLLM). Only Claude workers are allowed in the current security configuration.`
     );
@@ -3804,6 +3875,32 @@ function resolveBinaryPath(binary) {
     return binary;
   }
 }
+function isCliAvailable(agentType) {
+  const contract = getContract(agentType);
+  try {
+    const resolvedBinary = resolveBinaryPath(contract.binary);
+    if (process.platform === "win32" && /\.(cmd|bat)$/i.test(resolvedBinary)) {
+      const comspec = process.env.COMSPEC || "cmd.exe";
+      const result2 = spawnSync3(comspec, ["/d", "/s", "/c", `"${resolvedBinary}" --version`], { timeout: 5e3 });
+      return result2.status === 0;
+    }
+    const result = spawnSync3(resolvedBinary, ["--version"], {
+      timeout: 5e3,
+      shell: process.platform === "win32"
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+function validateCliAvailable(agentType) {
+  if (!isCliAvailable(agentType)) {
+    const contract = getContract(agentType);
+    throw new Error(
+      `CLI agent '${agentType}' not found. ${contract.installInstructions}`
+    );
+  }
+}
 function resolveValidatedBinaryPath(agentType) {
   const contract = getContract(agentType);
   return resolveCliBinaryPath(contract.binary);
@@ -3821,6 +3918,9 @@ function buildWorkerArgv(agentType, config) {
   const args = buildLaunchArgs(agentType, config);
   return [binary, ...args];
 }
+function buildWorkerCommand(agentType, config) {
+  return buildWorkerArgv(agentType, config).map((part) => `'${part.replace(/'/g, `'"'"'`)}'`).join(" ");
+}
 function getWorkerEnv(teamName, workerName, agentType, env = process.env) {
   validateTeamName(teamName);
   const workerEnv = {
@@ -3835,6 +3935,9 @@ function getWorkerEnv(teamName, workerName, agentType, env = process.env) {
     }
   }
   return workerEnv;
+}
+function parseCliOutput(agentType, rawOutput) {
+  return getContract(agentType).parseOutput(rawOutput);
 }
 function isPromptModeAgent(agentType) {
   const contract = getContract(agentType);
@@ -3871,7 +3974,7 @@ function getPromptModeArgs(agentType, instruction) {
   }
   return [instruction];
 }
-var resolvedPathCache, UNTRUSTED_PATH_PATTERNS, CONTRACTS, WORKER_MODEL_ENV_ALLOWLIST;
+var cjsRequire, resolvedPathCache, UNTRUSTED_PATH_PATTERNS, _testInternals, CONTRACTS, WORKER_MODEL_ENV_ALLOWLIST;
 var init_model_contract = __esm({
   "src/team/model-contract.ts"() {
     "use strict";
@@ -3879,74 +3982,79 @@ var init_model_contract = __esm({
     init_delegation_enforcer();
     init_models();
     init_security_config();
+    cjsRequire = createRequire(import.meta.url);
     resolvedPathCache = /* @__PURE__ */ new Map();
     UNTRUSTED_PATH_PATTERNS = [
       /^\/tmp(\/|$)/,
       /^\/var\/tmp(\/|$)/,
       /^\/dev\/shm(\/|$)/
     ];
-    CONTRACTS = {
-      claude: {
-        agentType: "claude",
-        binary: "claude",
-        installInstructions: "Install Claude CLI: https://claude.ai/download",
-        buildLaunchArgs(model, extraFlags = []) {
-          const args = ["--dangerously-skip-permissions"];
-          if (model) {
-            const resolved = isProviderSpecificModelId(model) ? model : normalizeToCcAlias(model);
-            args.push("--model", resolved);
-          }
-          return [...args, ...extraFlags];
-        },
-        parseOutput(rawOutput) {
-          return rawOutput.trim();
-        }
-      },
-      codex: {
-        agentType: "codex",
-        binary: "codex",
-        installInstructions: "Install Codex CLI: npm install -g @openai/codex",
-        supportsPromptMode: true,
-        // Codex accepts prompt as a positional argument (no flag needed):
-        //   codex [OPTIONS] [PROMPT]
-        buildLaunchArgs(model, extraFlags = []) {
-          const args = ["--dangerously-bypass-approvals-and-sandbox"];
-          if (model) args.push("--model", model);
-          return [...args, ...extraFlags];
-        },
-        parseOutput(rawOutput) {
-          const lines = rawOutput.trim().split("\n").filter(Boolean);
-          for (let i = lines.length - 1; i >= 0; i--) {
-            try {
-              const parsed = JSON.parse(lines[i]);
-              if (parsed.type === "message" && parsed.role === "assistant") {
-                return parsed.content ?? rawOutput;
-              }
-              if (parsed.type === "result" || parsed.output) {
-                return parsed.output ?? parsed.result ?? rawOutput;
-              }
-            } catch {
-            }
-          }
-          return rawOutput.trim();
-        }
-      },
-      gemini: {
-        agentType: "gemini",
-        binary: "gemini",
-        installInstructions: "Install Gemini CLI: npm install -g @google/gemini-cli",
-        supportsPromptMode: true,
-        promptModeFlag: "-i",
-        buildLaunchArgs(model, extraFlags = []) {
-          const args = ["--approval-mode", "yolo"];
-          if (model) args.push("--model", model);
-          return [...args, ...extraFlags];
-        },
-        parseOutput(rawOutput) {
-          return rawOutput.trim();
-        }
-      }
+    _testInternals = {
+      UNTRUSTED_PATH_PATTERNS,
+      getTrustedPrefixes
     };
+    CONTRACTS = /* @__PURE__ */ new Map();
+    CONTRACTS.set("claude", {
+      agentType: "claude",
+      binary: "claude",
+      installInstructions: "Install Claude CLI: https://claude.ai/download",
+      hints: { startupWaitStrategy: "evidence-file" },
+      buildLaunchArgs(model, extraFlags = []) {
+        const args = ["--dangerously-skip-permissions"];
+        if (model) {
+          const resolved = isProviderSpecificModelId(model) ? model : normalizeToCcAlias(model);
+          args.push("--model", resolved);
+        }
+        return [...args, ...extraFlags];
+      },
+      parseOutput(rawOutput) {
+        return rawOutput.trim();
+      }
+    });
+    CONTRACTS.set("codex", {
+      agentType: "codex",
+      binary: "codex",
+      installInstructions: "Install Codex CLI: npm install -g @openai/codex",
+      supportsPromptMode: true,
+      hints: { modelEnvPrefix: "OMC_CODEX", startupWaitStrategy: "prompt-mode" },
+      buildLaunchArgs(model, extraFlags = []) {
+        const args = ["--dangerously-bypass-approvals-and-sandbox"];
+        if (model) args.push("--model", model);
+        return [...args, ...extraFlags];
+      },
+      parseOutput(rawOutput) {
+        const lines = rawOutput.trim().split("\n").filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const parsed = JSON.parse(lines[i]);
+            if (parsed.type === "message" && parsed.role === "assistant") {
+              return parsed.content ?? rawOutput;
+            }
+            if (parsed.type === "result" || parsed.output) {
+              return parsed.output ?? parsed.result ?? rawOutput;
+            }
+          } catch {
+          }
+        }
+        return rawOutput.trim();
+      }
+    });
+    CONTRACTS.set("gemini", {
+      agentType: "gemini",
+      binary: "gemini",
+      installInstructions: "Install Gemini CLI: npm install -g @google/gemini-cli",
+      supportsPromptMode: true,
+      promptModeFlag: "-i",
+      hints: { needsTrustConfirm: true, modelEnvPrefix: "OMC_GEMINI", startupWaitStrategy: "prompt-mode" },
+      buildLaunchArgs(model, extraFlags = []) {
+        const args = ["--approval-mode", "yolo"];
+        if (model) args.push("--model", model);
+        return [...args, ...extraFlags];
+      },
+      parseOutput(rawOutput) {
+        return rawOutput.trim();
+      }
+    });
     WORKER_MODEL_ENV_ALLOWLIST = [
       "ANTHROPIC_MODEL",
       "CLAUDE_MODEL",
@@ -3999,6 +4107,14 @@ function agentTypeGuidance(agentType) {
   const teamApiCommand = formatOmcCliInvocation("team api");
   const claimTaskCommand = formatOmcCliInvocation("team api claim-task");
   const transitionTaskStatusCommand = formatOmcCliInvocation("team api transition-task-status");
+  try {
+    const { getContract: getContract2 } = (init_model_contract(), __toCommonJS(model_contract_exports));
+    const contract = getContract2(agentType);
+    if (contract.hints?.workerGuidanceOverride) {
+      return contract.hints.workerGuidanceOverride;
+    }
+  } catch {
+  }
   switch (agentType) {
     case "codex":
       return [
@@ -4017,7 +4133,7 @@ function agentTypeGuidance(agentType) {
     case "claude":
     default:
       return [
-        "### Agent-Type Guidance (claude)",
+        `### Agent-Type Guidance (${agentType})`,
         "- Keep reasoning focused on assigned task IDs and send concise progress acks to leader-fixed.",
         "- Before any risky command, send a blocker/proposal message to leader-fixed and wait for updated inbox instructions."
       ].join("\n");
@@ -5035,12 +5151,11 @@ async function spawnV2Worker(opts) {
     OMC_TEAM_LEADER_CWD: opts.cwd
   };
   const resolvedBinaryPath = opts.resolvedBinaryPaths[opts.agentType] ?? resolveValidatedBinaryPath(opts.agentType);
+  const contract = getContract(opts.agentType);
   const modelForAgent = (() => {
-    if (opts.agentType === "codex") {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL || process.env.OMC_CODEX_DEFAULT_MODEL || void 0;
-    }
-    if (opts.agentType === "gemini") {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL || process.env.OMC_GEMINI_DEFAULT_MODEL || void 0;
+    if (contract.hints?.modelEnvPrefix) {
+      const envFallback = `OMC_EXTERNAL_MODELS_DEFAULT_${contract.hints.modelEnvPrefix.replace("OMC_", "")}_MODEL`;
+      return process.env[envFallback] || process.env[`${contract.hints.modelEnvPrefix}_DEFAULT_MODEL`] || void 0;
     }
     return resolveClaudeWorkerModel();
   })();
@@ -5089,7 +5204,7 @@ async function spawnV2Worker(opts) {
       if (usePromptMode) {
         return { ok: true, transport: "prompt_stdin", reason: "prompt_mode_launch_args" };
       }
-      if (opts.agentType === "gemini") {
+      if (contract.hints?.needsTrustConfirm) {
         const confirmed = await notifyPaneWithRetry(opts.sessionName, paneId, "1");
         if (!confirmed) {
           return { ok: false, transport: "tmux_send_keys", reason: "worker_notify_failed:trust-confirm" };
@@ -5109,7 +5224,7 @@ async function spawnV2Worker(opts) {
       startupFailureReason: dispatchOutcome.reason
     };
   }
-  if (opts.agentType === "claude") {
+  if (contract.hints?.startupWaitStrategy === "evidence-file") {
     const settled = await waitForWorkerStartupEvidence(
       opts.teamName,
       opts.workerName,
@@ -5384,10 +5499,10 @@ async function requeueDeadWorkerTasks(teamName, deadWorkerNames, cwd) {
     await writeFile6(sidecarPath, JSON.stringify(sidecar, null, 2), "utf-8");
     const taskPath2 = absPath(cwd, TeamPaths.taskFile(sanitized, task.id));
     try {
-      const { readFileSync: readFileSync11, writeFileSync: writeFileSync3 } = await import("fs");
+      const { readFileSync: readFileSync13, writeFileSync: writeFileSync3 } = await import("fs");
       const { withFileLockSync: withFileLockSync2 } = await Promise.resolve().then(() => (init_file_lock(), file_lock_exports));
       withFileLockSync2(taskPath2 + ".lock", () => {
-        const raw = readFileSync11(taskPath2, "utf-8");
+        const raw = readFileSync13(taskPath2, "utf-8");
         const taskData = JSON.parse(raw);
         if (taskData.status === "in_progress") {
           taskData.status = "pending";
@@ -5801,9 +5916,9 @@ var init_runtime_v2 = __esm({
 // src/cli/team.ts
 import { randomUUID as randomUUID6 } from "crypto";
 import { spawn } from "child_process";
-import { existsSync as existsSync17, mkdirSync as mkdirSync3, readFileSync as readFileSync10, writeFileSync as writeFileSync2 } from "fs";
+import { existsSync as existsSync19, mkdirSync as mkdirSync3, readFileSync as readFileSync12, writeFileSync as writeFileSync2 } from "fs";
 import { readFile as readFile10, rm as rm4 } from "fs/promises";
-import { dirname as dirname13, join as join20 } from "path";
+import { dirname as dirname13, join as join22 } from "path";
 import { fileURLToPath as fileURLToPath3 } from "url";
 
 // src/team/api-interop.ts
@@ -6751,8 +6866,160 @@ init_team_name();
 init_monitor();
 init_platform();
 init_paths();
+
+// src/plugins/plugin-loader.ts
+init_model_contract();
+import { existsSync as existsSync17, readFileSync as readFileSync10, readdirSync as readdirSync4 } from "fs";
+import { createRequire as createRequire2 } from "node:module";
+import { join as join20 } from "path";
+var pluginRequire = createRequire2(import.meta.url);
+var PLUGIN_NAME_RE = /^omc-cli-/;
+var AGENT_TYPE_RE = /^[a-z][a-z0-9-]*$/;
+var PluginLoader = class {
+  loaded = false;
+  discoverPlugins(rootDir) {
+    const nodeModulesPath = join20(rootDir, "node_modules");
+    if (!existsSync17(nodeModulesPath)) return [];
+    const manifests = [];
+    try {
+      const entries = readdirSync4(nodeModulesPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+        if (PLUGIN_NAME_RE.test(entry.name)) {
+          const manifest = this.readManifest(join20(nodeModulesPath, entry.name));
+          if (manifest) manifests.push(manifest);
+          continue;
+        }
+        if (entry.name.startsWith("@")) {
+          try {
+            const scopedPath = join20(nodeModulesPath, entry.name);
+            const scopedEntries = readdirSync4(scopedPath, { withFileTypes: true });
+            for (const scopedEntry of scopedEntries) {
+              if (PLUGIN_NAME_RE.test(scopedEntry.name)) {
+                const manifest = this.readManifest(join20(scopedPath, scopedEntry.name));
+                if (manifest) manifests.push(manifest);
+              }
+            }
+          } catch {
+          }
+        }
+      }
+    } catch {
+    }
+    return manifests;
+  }
+  loadPlugin(pluginDir) {
+    try {
+      const mod = pluginRequire(pluginDir);
+      const contract = mod.default ?? mod;
+      if (!this.validateContract(contract)) {
+        console.warn(`[omc:plugins] Invalid contract from ${pluginDir} \u2014 skipping`);
+        return null;
+      }
+      return contract;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.warn(`[omc:plugins] Failed to load plugin from ${pluginDir}: ${msg}`);
+      return null;
+    }
+  }
+  registerAll(rootDir, config) {
+    if (this.loaded) return;
+    const disabled = new Set(config?.disabled ?? []);
+    const manifests = this.discoverPlugins(rootDir);
+    for (const manifest of manifests) {
+      if (disabled.has(manifest.agentType) || disabled.has(manifest.name)) {
+        continue;
+      }
+      const pluginDir = this.resolvePluginDir(rootDir, manifest.name);
+      if (!pluginDir) continue;
+      const contract = this.loadPlugin(pluginDir);
+      if (contract) {
+        try {
+          registerContract(contract);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.warn(`[omc:plugins] Failed to register ${manifest.name}: ${msg}`);
+        }
+      }
+    }
+    this.loaded = true;
+  }
+  validateContract(contract) {
+    if (!contract || typeof contract !== "object") return false;
+    const c = contract;
+    if (typeof c.agentType !== "string") return false;
+    if (!AGENT_TYPE_RE.test(c.agentType)) return false;
+    if (typeof c.binary !== "string") return false;
+    if (typeof c.installInstructions !== "string") return false;
+    if (typeof c.buildLaunchArgs !== "function") return false;
+    if (typeof c.parseOutput !== "function") return false;
+    return true;
+  }
+  readManifest(pluginDir) {
+    const pkgPath = join20(pluginDir, "package.json");
+    if (!existsSync17(pkgPath)) return null;
+    try {
+      const raw = JSON.parse(readFileSync10(pkgPath, "utf-8"));
+      const agentType = raw.omc?.agentType ?? raw.omcAgentType;
+      if (!agentType || typeof agentType !== "string") return null;
+      if (!AGENT_TYPE_RE.test(agentType)) return null;
+      return {
+        name: raw.name ?? "",
+        version: raw.version ?? "0.0.0",
+        agentType
+      };
+    } catch {
+      return null;
+    }
+  }
+  resolvePluginDir(rootDir, pluginName) {
+    const directPath = join20(rootDir, "node_modules", pluginName);
+    if (existsSync17(directPath)) return directPath;
+    if (pluginName.startsWith("@")) {
+      const scopedPath = join20(rootDir, "node_modules", pluginName);
+      if (existsSync17(scopedPath)) return scopedPath;
+    }
+    return null;
+  }
+};
+
+// src/plugins/config.ts
+import { existsSync as existsSync18, readFileSync as readFileSync11 } from "fs";
+import { join as join21 } from "path";
+function readPluginConfig(cwd) {
+  const configPath = join21(cwd, ".omc", "config.json");
+  if (!existsSync18(configPath)) return {};
+  try {
+    const raw = JSON.parse(readFileSync11(configPath, "utf-8"));
+    return raw.cliPlugins ?? {};
+  } catch {
+    return {};
+  }
+}
+
+// src/plugins/index.ts
+init_model_contract();
+var loader = null;
+function ensurePluginsLoaded() {
+  if (loader) return;
+  loader = new PluginLoader();
+  const config = readPluginConfig(process.cwd());
+  loader.registerAll(process.cwd(), config);
+}
+
+// src/cli/team.ts
 var JOB_ID_PATTERN = /^omc-[a-z0-9]{1,16}$/;
 var VALID_CLI_AGENT_TYPES = /* @__PURE__ */ new Set(["claude", "codex", "gemini"]);
+function isValidCliAgentType(token) {
+  if (VALID_CLI_AGENT_TYPES.has(token)) return true;
+  try {
+    ensurePluginsLoaded();
+    return getRegisteredTypes().includes(token);
+  } catch {
+    return false;
+  }
+}
 var SUBCOMMANDS = /* @__PURE__ */ new Set(["start", "status", "wait", "cleanup", "resume", "shutdown", "api", "help", "--help", "-h"]);
 var SUPPORTED_API_OPERATIONS = /* @__PURE__ */ new Set([
   "send-message",
@@ -6819,24 +7086,24 @@ function resolveRuntimeCliPath(env = process.env) {
     return env.OMC_RUNTIME_CLI_PATH;
   }
   const moduleDir = dirname13(fileURLToPath3(import.meta.url));
-  return join20(moduleDir, "../../bridge/runtime-cli.cjs");
+  return join22(moduleDir, "../../bridge/runtime-cli.cjs");
 }
 function ensureJobsDir(jobsDir) {
-  if (!existsSync17(jobsDir)) {
+  if (!existsSync19(jobsDir)) {
     mkdirSync3(jobsDir, { recursive: true });
   }
 }
 function jobPath(jobsDir, jobId) {
-  return join20(jobsDir, `${jobId}.json`);
+  return join22(jobsDir, `${jobId}.json`);
 }
 function resultArtifactPath(jobsDir, jobId) {
-  return join20(jobsDir, `${jobId}-result.json`);
+  return join22(jobsDir, `${jobId}-result.json`);
 }
 function panesArtifactPath(jobsDir, jobId) {
-  return join20(jobsDir, `${jobId}-panes.json`);
+  return join22(jobsDir, `${jobId}-panes.json`);
 }
 function teamStateRoot2(cwd, teamName) {
-  return join20(cwd, ".omc", "state", "team", teamName);
+  return join22(cwd, ".omc", "state", "team", teamName);
 }
 function validateJobId(jobId) {
   if (!JOB_ID_PATTERN.test(jobId)) {
@@ -6852,7 +7119,7 @@ function parseJsonSafe(content) {
 }
 function readJobFromDisk(jobId, jobsDir) {
   try {
-    const content = readFileSync10(jobPath(jobsDir, jobId), "utf-8");
+    const content = readFileSync12(jobPath(jobsDir, jobId), "utf-8");
     return parseJsonSafe(content);
   } catch {
     return null;
@@ -6881,7 +7148,7 @@ function generateJobId(now = Date.now()) {
 }
 function convergeWithResultArtifact(jobId, job, jobsDir) {
   try {
-    const artifactRaw = readFileSync10(resultArtifactPath(jobsDir, jobId), "utf-8");
+    const artifactRaw = readFileSync12(resultArtifactPath(jobsDir, jobId), "utf-8");
     const artifactParsed = parseJsonSafe(artifactRaw);
     if (artifactParsed?.status === "completed" || artifactParsed?.status === "failed") {
       return {
@@ -6918,7 +7185,7 @@ function toInt(value, flag) {
 function normalizeAgentType(value) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) throw new Error("Agent type cannot be empty");
-  if (!VALID_CLI_AGENT_TYPES.has(normalized)) {
+  if (!isValidCliAgentType(normalized)) {
     throw new Error(`Unsupported agent type: ${value}`);
   }
   return normalized;

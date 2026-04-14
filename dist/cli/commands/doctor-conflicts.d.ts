@@ -26,6 +26,18 @@ export interface ConflictReport {
     configIssues: {
         unknownFields: string[];
     };
+    cliPlugins: {
+        types: string[];
+        builtin: {
+            type: string;
+            available: boolean;
+        }[];
+        plugins: {
+            type: string;
+            binary: string;
+            available: boolean;
+        }[];
+    };
     mcpRegistrySync: ReturnType<typeof inspectUnifiedMcpRegistrySync>;
     hasConflicts: boolean;
 }
@@ -57,6 +69,10 @@ export declare function checkLegacySkills(): ConflictReport['legacySkills'];
  * Check for unknown fields in config files
  */
 export declare function checkConfigIssues(): ConflictReport['configIssues'];
+/**
+ * Check CLI agent availability for both built-in and plugin types.
+ */
+export declare function checkCliPlugins(): ConflictReport['cliPlugins'];
 /**
  * Run complete conflict check
  */

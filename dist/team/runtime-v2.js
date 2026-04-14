@@ -27,7 +27,7 @@ import { appendTeamEvent, emitMonitorDerivedEvents } from './events.js';
 import { DEFAULT_TEAM_GOVERNANCE, DEFAULT_TEAM_TRANSPORT_POLICY, getConfigGovernance, } from './governance.js';
 import { inferPhase } from './phase-controller.js';
 import { validateTeamName } from './team-name.js';
-import { buildWorkerArgv, resolveValidatedBinaryPath, getWorkerEnv as getModelWorkerEnv, isPromptModeAgent, getPromptModeArgs, resolveClaudeWorkerModel, } from './model-contract.js';
+import { buildWorkerArgv, resolveValidatedBinaryPath, getWorkerEnv as getModelWorkerEnv, isPromptModeAgent, getPromptModeArgs, resolveClaudeWorkerModel, getContract, } from './model-contract.js';
 import { createTeamSession, spawnWorkerInPane, sendToWorker, waitForPaneReady, paneHasActiveTask, paneLooksReady, applyMainVerticalLayout, } from './tmux-session.js';
 import { composeInitialInbox, ensureWorkerStateDir, writeWorkerOverlay, generateTriggerMessage, generatePromptModeStartupPrompt, } from './worker-bootstrap.js';
 import { queueInboxInstruction } from './mcp-comm.js';
@@ -231,15 +231,12 @@ async function spawnV2Worker(opts) {
     // Resolve model from environment variables.
     // For Claude agents on Bedrock/Vertex, resolve the provider-specific model
     // so workers don't fall back to invalid Anthropic API model names. (#1695)
+    const contract = getContract(opts.agentType);
     const modelForAgent = (() => {
-        if (opts.agentType === 'codex') {
-            return process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL
-                || process.env.OMC_CODEX_DEFAULT_MODEL
-                || undefined;
-        }
-        if (opts.agentType === 'gemini') {
-            return process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL
-                || process.env.OMC_GEMINI_DEFAULT_MODEL
+        if (contract.hints?.modelEnvPrefix) {
+            const envFallback = `OMC_EXTERNAL_MODELS_DEFAULT_${contract.hints.modelEnvPrefix.replace('OMC_', '')}_MODEL`;
+            return process.env[envFallback]
+                || process.env[`${contract.hints.modelEnvPrefix}_DEFAULT_MODEL`]
                 || undefined;
         }
         // Claude agents: resolve Bedrock/Vertex model when on those providers
@@ -295,7 +292,7 @@ async function spawnV2Worker(opts) {
             if (usePromptMode) {
                 return { ok: true, transport: 'prompt_stdin', reason: 'prompt_mode_launch_args' };
             }
-            if (opts.agentType === 'gemini') {
+            if (contract.hints?.needsTrustConfirm) {
                 const confirmed = await notifyPaneWithRetry(opts.sessionName, paneId, '1');
                 if (!confirmed) {
                     return { ok: false, transport: 'tmux_send_keys', reason: 'worker_notify_failed:trust-confirm' };
@@ -315,7 +312,7 @@ async function spawnV2Worker(opts) {
             startupFailureReason: dispatchOutcome.reason,
         };
     }
-    if (opts.agentType === 'claude') {
+    if (contract.hints?.startupWaitStrategy === 'evidence-file') {
         const settled = await waitForWorkerStartupEvidence(opts.teamName, opts.workerName, opts.taskId, opts.cwd, 6);
         if (!settled) {
             return {

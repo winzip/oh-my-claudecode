@@ -8,10 +8,22 @@
  *   omc team api <operation> --input '...'  Worker CLI API
  */
 import { TEAM_API_OPERATIONS, resolveTeamApiOperation, executeTeamApiOperation, } from '../../team/api-interop.js';
+import { ensurePluginsLoaded, getRegisteredTypes } from '../../plugins/index.js';
 const HELP_TOKENS = new Set(['--help', '-h', 'help']);
 const MIN_WORKER_COUNT = 1;
 const MAX_WORKER_COUNT = 20;
 const VALID_TEAM_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
+function isValidAgentType(token) {
+    if (VALID_TEAM_CLI_AGENT_TYPES.has(token))
+        return true;
+    try {
+        ensurePluginsLoaded();
+        return getRegisteredTypes().includes(token);
+    }
+    catch {
+        return false;
+    }
+}
 const TEAM_HELP = `
 Usage: omc team [N:agent-type[:role]] [--new-window] "<task description>"
        omc team status <team-name>
@@ -231,7 +243,7 @@ function normalizeWorkerSpecSegment(match) {
     if (explicitRole) {
         return { count, agentType: token, role: explicitRole };
     }
-    if (VALID_TEAM_CLI_AGENT_TYPES.has(token)) {
+    if (isValidAgentType(token)) {
         return { count, agentType: token };
     }
     return { count, agentType: 'claude', role: token };

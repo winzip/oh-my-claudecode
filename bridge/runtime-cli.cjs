@@ -139,6 +139,1871 @@ var init_team_name = __esm({
   }
 });
 
+// src/agents/utils.ts
+function getPackageDir() {
+  if (typeof __dirname !== "undefined" && __dirname) {
+    const currentDirName = (0, import_path2.basename)(__dirname);
+    const parentDirName = (0, import_path2.basename)((0, import_path2.dirname)(__dirname));
+    if (currentDirName === "bridge") {
+      return (0, import_path2.join)(__dirname, "..");
+    }
+    if (currentDirName === "agents" && (parentDirName === "src" || parentDirName === "dist")) {
+      return (0, import_path2.join)(__dirname, "..", "..");
+    }
+  }
+  try {
+    const __filename = (0, import_url.fileURLToPath)(import_meta.url);
+    const __dirname2 = (0, import_path2.dirname)(__filename);
+    const currentDirName = (0, import_path2.basename)(__dirname2);
+    if (currentDirName === "bridge") {
+      return (0, import_path2.join)(__dirname2, "..");
+    }
+    return (0, import_path2.join)(__dirname2, "..", "..");
+  } catch {
+  }
+  return process.cwd();
+}
+function stripFrontmatter(content) {
+  const match = content.match(/^---[\s\S]*?---\s*([\s\S]*)$/);
+  return match ? match[1].trim() : content.trim();
+}
+function loadAgentPrompt(agentName) {
+  if (!/^[a-z0-9-]+$/i.test(agentName)) {
+    throw new Error(`Invalid agent name: contains disallowed characters`);
+  }
+  try {
+    if (typeof __AGENT_PROMPTS__ !== "undefined" && __AGENT_PROMPTS__ !== null) {
+      const prompt = __AGENT_PROMPTS__[agentName];
+      if (prompt) return prompt;
+    }
+  } catch {
+  }
+  try {
+    const agentsDir = (0, import_path2.join)(getPackageDir(), "agents");
+    const agentPath = (0, import_path2.join)(agentsDir, `${agentName}.md`);
+    const resolvedPath = (0, import_path2.resolve)(agentPath);
+    const resolvedAgentsDir = (0, import_path2.resolve)(agentsDir);
+    const rel = (0, import_path2.relative)(resolvedAgentsDir, resolvedPath);
+    if (rel.startsWith("..") || (0, import_path2.isAbsolute)(rel)) {
+      throw new Error(`Invalid agent name: path traversal detected`);
+    }
+    const content = (0, import_fs.readFileSync)(agentPath, "utf-8");
+    return stripFrontmatter(content);
+  } catch (error) {
+    const message = error instanceof Error && error.message.includes("Invalid agent name") ? error.message : "Agent prompt file not found";
+    console.warn(`[loadAgentPrompt] ${message}`);
+    return `Agent: ${agentName}
+
+Prompt unavailable.`;
+  }
+}
+var import_fs, import_path2, import_url, import_meta;
+var init_utils = __esm({
+  "src/agents/utils.ts"() {
+    "use strict";
+    import_fs = require("fs");
+    import_path2 = require("path");
+    import_url = require("url");
+    import_meta = {};
+  }
+});
+
+// src/utils/config-dir.ts
+function stripTrailingSep(p) {
+  if (!p.endsWith(import_path3.sep)) {
+    return p;
+  }
+  return p === (0, import_path3.parse)(p).root ? p : p.slice(0, -1);
+}
+function getClaudeConfigDir() {
+  const home = (0, import_os.homedir)();
+  const configured = process.env.CLAUDE_CONFIG_DIR?.trim();
+  if (!configured) {
+    return stripTrailingSep((0, import_path3.normalize)((0, import_path3.join)(home, ".claude")));
+  }
+  if (configured === "~") {
+    return stripTrailingSep((0, import_path3.normalize)(home));
+  }
+  if (configured.startsWith("~/") || configured.startsWith("~\\")) {
+    return stripTrailingSep((0, import_path3.normalize)((0, import_path3.join)(home, configured.slice(2))));
+  }
+  return stripTrailingSep((0, import_path3.normalize)(configured));
+}
+var import_path3, import_os;
+var init_config_dir = __esm({
+  "src/utils/config-dir.ts"() {
+    "use strict";
+    import_path3 = require("path");
+    import_os = require("os");
+  }
+});
+
+// src/utils/paths.ts
+function getConfigDir() {
+  if (process.platform === "win32") {
+    return process.env.APPDATA || (0, import_path4.join)((0, import_os2.homedir)(), "AppData", "Roaming");
+  }
+  return process.env.XDG_CONFIG_HOME || (0, import_path4.join)((0, import_os2.homedir)(), ".config");
+}
+var import_path4, import_fs2, import_os2, STALE_THRESHOLD_MS;
+var init_paths = __esm({
+  "src/utils/paths.ts"() {
+    "use strict";
+    import_path4 = require("path");
+    import_fs2 = require("fs");
+    import_os2 = require("os");
+    init_config_dir();
+    STALE_THRESHOLD_MS = 24 * 60 * 60 * 1e3;
+  }
+});
+
+// src/utils/jsonc.ts
+function parseJsonc(content) {
+  const cleaned = stripJsoncComments(content);
+  return JSON.parse(cleaned);
+}
+function stripJsoncComments(content) {
+  let result = "";
+  let i = 0;
+  while (i < content.length) {
+    if (content[i] === "/" && content[i + 1] === "/") {
+      while (i < content.length && content[i] !== "\n") {
+        i++;
+      }
+      continue;
+    }
+    if (content[i] === "/" && content[i + 1] === "*") {
+      i += 2;
+      while (i < content.length && !(content[i] === "*" && content[i + 1] === "/")) {
+        i++;
+      }
+      i += 2;
+      continue;
+    }
+    if (content[i] === '"') {
+      result += content[i];
+      i++;
+      while (i < content.length && content[i] !== '"') {
+        if (content[i] === "\\") {
+          result += content[i];
+          i++;
+          if (i < content.length) {
+            result += content[i];
+            i++;
+          }
+          continue;
+        }
+        result += content[i];
+        i++;
+      }
+      if (i < content.length) {
+        result += content[i];
+        i++;
+      }
+      continue;
+    }
+    result += content[i];
+    i++;
+  }
+  return result;
+}
+var init_jsonc = __esm({
+  "src/utils/jsonc.ts"() {
+    "use strict";
+  }
+});
+
+// src/utils/ssrf-guard.ts
+function validateUrlForSSRF(urlString) {
+  if (!urlString || typeof urlString !== "string") {
+    return { allowed: false, reason: "URL is empty or invalid" };
+  }
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return { allowed: false, reason: "Invalid URL format" };
+  }
+  if (!ALLOWED_SCHEMES.includes(parsed.protocol)) {
+    return { allowed: false, reason: `Protocol '${parsed.protocol}' is not allowed` };
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  for (const pattern of BLOCKED_HOST_PATTERNS) {
+    if (pattern.test(hostname)) {
+      return {
+        allowed: false,
+        reason: `Hostname '${hostname}' resolves to a blocked internal/private address`
+      };
+    }
+  }
+  if (/^0x[0-9a-f]+$/i.test(hostname)) {
+    return {
+      allowed: false,
+      reason: `Hostname '${hostname}' looks like a hex-encoded IP address`
+    };
+  }
+  if (/^\d+$/.test(hostname) && hostname.length > 3) {
+    return {
+      allowed: false,
+      reason: `Hostname '${hostname}' looks like a decimal-encoded IP address`
+    };
+  }
+  if (/^0\d+\./.test(hostname)) {
+    return {
+      allowed: false,
+      reason: `Hostname '${hostname}' looks like an octal-encoded IP address`
+    };
+  }
+  if (parsed.username || parsed.password) {
+    return { allowed: false, reason: "URLs with embedded credentials are not allowed" };
+  }
+  const dangerousPaths = [
+    "/metadata",
+    "/meta-data",
+    "/latest/meta-data",
+    "/computeMetadata"
+  ];
+  const pathLower = parsed.pathname.toLowerCase();
+  for (const dangerous of dangerousPaths) {
+    if (pathLower.startsWith(dangerous)) {
+      return {
+        allowed: false,
+        reason: `Path '${parsed.pathname}' is blocked (cloud metadata access)`
+      };
+    }
+  }
+  return { allowed: true };
+}
+function validateAnthropicBaseUrl(urlString) {
+  const result = validateUrlForSSRF(urlString);
+  if (!result.allowed) {
+    return result;
+  }
+  let parsed;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    return { allowed: false, reason: "Invalid URL" };
+  }
+  if (parsed.protocol === "http:") {
+    console.warn("[SSRF Guard] Warning: Using HTTP instead of HTTPS for ANTHROPIC_BASE_URL");
+  }
+  return { allowed: true };
+}
+var BLOCKED_HOST_PATTERNS, ALLOWED_SCHEMES;
+var init_ssrf_guard = __esm({
+  "src/utils/ssrf-guard.ts"() {
+    "use strict";
+    BLOCKED_HOST_PATTERNS = [
+      // Exact matches
+      /^localhost$/i,
+      /^127\.[0-9]+\.[0-9]+\.[0-9]+$/,
+      // Loopback
+      /^10\.[0-9]+\.[0-9]+\.[0-9]+$/,
+      // Class A private
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\.[0-9]+\.[0-9]+$/,
+      // Class B private
+      /^192\.168\.[0-9]+\.[0-9]+$/,
+      // Class C private
+      /^169\.254\.[0-9]+\.[0-9]+$/,
+      // Link-local
+      /^(0|22[4-9]|23[0-9])\.[0-9]+\.[0-9]+\.[0-9]+$/,
+      // Multicast, reserved
+      /^\[?::1\]?$/,
+      // IPv6 loopback
+      /^\[?fc00:/i,
+      // IPv6 unique local
+      /^\[?fe80:/i,
+      // IPv6 link-local
+      /^\[?::ffff:/i,
+      // IPv6-mapped IPv4 (all private ranges accessible via this prefix)
+      /^\[?0{0,4}:{0,2}ffff:/i
+      // IPv6-mapped IPv4 expanded forms
+    ];
+    ALLOWED_SCHEMES = ["https:", "http:"];
+  }
+});
+
+// src/config/models.ts
+function resolveTierModelFromEnv(tier) {
+  for (const key of TIER_ENV_KEYS[tier]) {
+    const value = process.env[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return void 0;
+}
+function getDefaultModelHigh() {
+  return resolveTierModelFromEnv("HIGH") || BUILTIN_TIER_MODEL_DEFAULTS.HIGH;
+}
+function getDefaultModelMedium() {
+  return resolveTierModelFromEnv("MEDIUM") || BUILTIN_TIER_MODEL_DEFAULTS.MEDIUM;
+}
+function getDefaultModelLow() {
+  return resolveTierModelFromEnv("LOW") || BUILTIN_TIER_MODEL_DEFAULTS.LOW;
+}
+function getDefaultTierModels() {
+  return {
+    LOW: getDefaultModelLow(),
+    MEDIUM: getDefaultModelMedium(),
+    HIGH: getDefaultModelHigh()
+  };
+}
+function resolveClaudeFamily(modelId) {
+  const lower = modelId.toLowerCase();
+  if (!lower.includes("claude")) return null;
+  if (lower.includes("sonnet")) return "SONNET";
+  if (lower.includes("opus")) return "OPUS";
+  if (lower.includes("haiku")) return "HAIKU";
+  return null;
+}
+function isBedrock() {
+  if (process.env.CLAUDE_CODE_USE_BEDROCK === "1") {
+    return true;
+  }
+  const modelId = process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || "";
+  if (modelId && /^((us|eu|ap|global)\.anthropic\.|anthropic\.claude)/i.test(modelId)) {
+    return true;
+  }
+  if (modelId && /^arn:aws(-[^:]+)?:bedrock:/i.test(modelId) && /:(inference-profile|application-inference-profile)\//i.test(modelId) && modelId.toLowerCase().includes("claude")) {
+    return true;
+  }
+  return false;
+}
+function isProviderSpecificModelId(modelId) {
+  if (/^((us|eu|ap|global)\.anthropic\.|anthropic\.claude)/i.test(modelId)) {
+    return true;
+  }
+  if (/^arn:aws(-[^:]+)?:bedrock:/i.test(modelId)) {
+    return true;
+  }
+  if (modelId.toLowerCase().startsWith("vertex_ai/")) {
+    return true;
+  }
+  return false;
+}
+function isVertexAI() {
+  if (process.env.CLAUDE_CODE_USE_VERTEX === "1") {
+    return true;
+  }
+  const modelId = process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || "";
+  if (modelId && modelId.toLowerCase().startsWith("vertex_ai/")) {
+    return true;
+  }
+  return false;
+}
+function isNonClaudeProvider() {
+  if (process.env.OMC_ROUTING_FORCE_INHERIT === "true") {
+    return true;
+  }
+  if (isBedrock()) {
+    return true;
+  }
+  if (isVertexAI()) {
+    return true;
+  }
+  const modelId = process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || "";
+  if (modelId && !modelId.toLowerCase().includes("claude")) {
+    return true;
+  }
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || "";
+  if (baseUrl) {
+    const validation = validateAnthropicBaseUrl(baseUrl);
+    if (!validation.allowed) {
+      console.error(`[SSRF Guard] Rejecting ANTHROPIC_BASE_URL: ${validation.reason}`);
+      return true;
+    }
+    if (!baseUrl.includes("anthropic.com")) {
+      return true;
+    }
+  }
+  return false;
+}
+var TIER_ENV_KEYS, CLAUDE_FAMILY_DEFAULTS, BUILTIN_TIER_MODEL_DEFAULTS, CLAUDE_FAMILY_HIGH_VARIANTS, BUILTIN_EXTERNAL_MODEL_DEFAULTS;
+var init_models = __esm({
+  "src/config/models.ts"() {
+    "use strict";
+    init_ssrf_guard();
+    TIER_ENV_KEYS = {
+      LOW: [
+        "OMC_MODEL_LOW",
+        "CLAUDE_CODE_BEDROCK_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL"
+      ],
+      MEDIUM: [
+        "OMC_MODEL_MEDIUM",
+        "CLAUDE_CODE_BEDROCK_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL"
+      ],
+      HIGH: [
+        "OMC_MODEL_HIGH",
+        "CLAUDE_CODE_BEDROCK_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL"
+      ]
+    };
+    CLAUDE_FAMILY_DEFAULTS = {
+      HAIKU: "claude-haiku-4-5",
+      SONNET: "claude-sonnet-4-6",
+      OPUS: "claude-opus-4-6"
+    };
+    BUILTIN_TIER_MODEL_DEFAULTS = {
+      LOW: CLAUDE_FAMILY_DEFAULTS.HAIKU,
+      MEDIUM: CLAUDE_FAMILY_DEFAULTS.SONNET,
+      HIGH: CLAUDE_FAMILY_DEFAULTS.OPUS
+    };
+    CLAUDE_FAMILY_HIGH_VARIANTS = {
+      HAIKU: `${CLAUDE_FAMILY_DEFAULTS.HAIKU}-high`,
+      SONNET: `${CLAUDE_FAMILY_DEFAULTS.SONNET}-high`,
+      OPUS: `${CLAUDE_FAMILY_DEFAULTS.OPUS}-high`
+    };
+    BUILTIN_EXTERNAL_MODEL_DEFAULTS = {
+      codexModel: "gpt-5.3-codex",
+      geminiModel: "gemini-3.1-pro-preview"
+    };
+  }
+});
+
+// src/config/loader.ts
+function buildDefaultConfig() {
+  const defaultTierModels = getDefaultTierModels();
+  return {
+    agents: {
+      omc: { model: defaultTierModels.HIGH },
+      explore: { model: defaultTierModels.LOW },
+      analyst: { model: defaultTierModels.HIGH },
+      planner: { model: defaultTierModels.HIGH },
+      architect: { model: defaultTierModels.HIGH },
+      debugger: { model: defaultTierModels.MEDIUM },
+      executor: { model: defaultTierModels.MEDIUM },
+      verifier: { model: defaultTierModels.MEDIUM },
+      securityReviewer: { model: defaultTierModels.MEDIUM },
+      codeReviewer: { model: defaultTierModels.HIGH },
+      testEngineer: { model: defaultTierModels.MEDIUM },
+      designer: { model: defaultTierModels.MEDIUM },
+      writer: { model: defaultTierModels.LOW },
+      qaTester: { model: defaultTierModels.MEDIUM },
+      scientist: { model: defaultTierModels.MEDIUM },
+      tracer: { model: defaultTierModels.MEDIUM },
+      gitMaster: { model: defaultTierModels.MEDIUM },
+      codeSimplifier: { model: defaultTierModels.HIGH },
+      critic: { model: defaultTierModels.HIGH },
+      documentSpecialist: { model: defaultTierModels.MEDIUM }
+    },
+    features: {
+      parallelExecution: true,
+      lspTools: true,
+      // Real LSP integration with language servers
+      astTools: true,
+      // Real AST tools using ast-grep
+      continuationEnforcement: true,
+      autoContextInjection: true
+    },
+    mcpServers: {
+      exa: { enabled: true },
+      context7: { enabled: true }
+    },
+    permissions: {
+      allowBash: true,
+      allowEdit: true,
+      allowWrite: true,
+      maxBackgroundTasks: 5
+    },
+    magicKeywords: {
+      ultrawork: ["ultrawork", "ulw", "uw"],
+      search: ["search", "find", "locate"],
+      analyze: ["analyze", "investigate", "examine"],
+      ultrathink: ["ultrathink", "think", "reason", "ponder"]
+    },
+    // Intelligent model routing configuration
+    routing: {
+      enabled: true,
+      defaultTier: "MEDIUM",
+      forceInherit: false,
+      escalationEnabled: true,
+      maxEscalations: 2,
+      tierModels: { ...defaultTierModels },
+      agentOverrides: {
+        architect: {
+          tier: "HIGH",
+          reason: "Advisory agent requires deep reasoning"
+        },
+        planner: {
+          tier: "HIGH",
+          reason: "Strategic planning requires deep reasoning"
+        },
+        critic: {
+          tier: "HIGH",
+          reason: "Critical review requires deep reasoning"
+        },
+        analyst: {
+          tier: "HIGH",
+          reason: "Pre-planning analysis requires deep reasoning"
+        },
+        explore: { tier: "LOW", reason: "Exploration is search-focused" },
+        writer: { tier: "LOW", reason: "Documentation is straightforward" }
+      },
+      escalationKeywords: [
+        "critical",
+        "production",
+        "urgent",
+        "security",
+        "breaking",
+        "architecture",
+        "refactor",
+        "redesign",
+        "root cause"
+      ],
+      simplificationKeywords: [
+        "find",
+        "list",
+        "show",
+        "where",
+        "search",
+        "locate",
+        "grep"
+      ]
+    },
+    // External models configuration (Codex, Gemini)
+    // Static defaults only — env var overrides applied in loadEnvConfig()
+    externalModels: {
+      defaults: {
+        codexModel: BUILTIN_EXTERNAL_MODEL_DEFAULTS.codexModel,
+        geminiModel: BUILTIN_EXTERNAL_MODEL_DEFAULTS.geminiModel
+      },
+      fallbackPolicy: {
+        onModelFailure: "provider_chain",
+        allowCrossProvider: false,
+        crossProviderOrder: ["codex", "gemini"]
+      }
+    },
+    // Delegation routing configuration (opt-in feature for external model routing)
+    delegationRouting: {
+      enabled: false,
+      defaultProvider: "claude",
+      roles: {}
+    },
+    planOutput: {
+      directory: ".omc/plans",
+      filenameTemplate: "{{name}}.md"
+    },
+    teleport: {
+      symlinkNodeModules: true
+    },
+    startupCodebaseMap: {
+      enabled: true,
+      maxFiles: 200,
+      maxDepth: 4
+    },
+    taskSizeDetection: {
+      enabled: true,
+      smallWordLimit: 50,
+      largeWordLimit: 200,
+      suppressHeavyModesForSmallTasks: true
+    },
+    promptPrerequisites: {
+      enabled: true,
+      sectionNames: {
+        memory: ["M\xC9MOIRE", "MEMOIRE", "MEMORY"],
+        skills: ["SKILLS"],
+        verifyFirst: ["VERIFY-FIRST", "VERIFY FIRST", "VERIFY_FIRST"],
+        context: ["CONTEXT"]
+      },
+      blockingTools: ["Edit", "MultiEdit", "Write", "Agent", "Task"],
+      executionKeywords: ["ralph", "ultrawork", "autopilot"]
+    }
+  };
+}
+function getConfigPaths() {
+  const userConfigDir = getConfigDir();
+  return {
+    user: (0, import_path5.join)(userConfigDir, "claude-omc", "config.jsonc"),
+    project: (0, import_path5.join)(process.cwd(), ".claude", "omc.jsonc")
+  };
+}
+function loadJsoncFile(path4) {
+  if (!(0, import_fs3.existsSync)(path4)) {
+    return null;
+  }
+  try {
+    const content = (0, import_fs3.readFileSync)(path4, "utf-8");
+    const result = parseJsonc(content);
+    return result;
+  } catch (error) {
+    console.error(`Error loading config from ${path4}:`, error);
+    return null;
+  }
+}
+function deepMerge(target, source) {
+  const result = { ...target };
+  const mutableResult = result;
+  for (const key of Object.keys(source)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype")
+      continue;
+    const sourceValue = source[key];
+    const targetValue = mutableResult[key];
+    if (sourceValue !== void 0 && typeof sourceValue === "object" && sourceValue !== null && !Array.isArray(sourceValue) && typeof targetValue === "object" && targetValue !== null && !Array.isArray(targetValue)) {
+      mutableResult[key] = deepMerge(
+        targetValue,
+        sourceValue
+      );
+    } else if (sourceValue !== void 0) {
+      mutableResult[key] = sourceValue;
+    }
+  }
+  return result;
+}
+function loadEnvConfig() {
+  const config = {};
+  if (process.env.EXA_API_KEY) {
+    config.mcpServers = {
+      ...config.mcpServers,
+      exa: { enabled: true, apiKey: process.env.EXA_API_KEY }
+    };
+  }
+  if (process.env.OMC_PARALLEL_EXECUTION !== void 0) {
+    config.features = {
+      ...config.features,
+      parallelExecution: process.env.OMC_PARALLEL_EXECUTION === "true"
+    };
+  }
+  if (process.env.OMC_LSP_TOOLS !== void 0) {
+    config.features = {
+      ...config.features,
+      lspTools: process.env.OMC_LSP_TOOLS === "true"
+    };
+  }
+  if (process.env.OMC_MAX_BACKGROUND_TASKS) {
+    const maxTasks = parseInt(process.env.OMC_MAX_BACKGROUND_TASKS, 10);
+    if (!isNaN(maxTasks)) {
+      config.permissions = {
+        ...config.permissions,
+        maxBackgroundTasks: maxTasks
+      };
+    }
+  }
+  if (process.env.OMC_ROUTING_ENABLED !== void 0) {
+    config.routing = {
+      ...config.routing,
+      enabled: process.env.OMC_ROUTING_ENABLED === "true"
+    };
+  }
+  if (process.env.OMC_ROUTING_FORCE_INHERIT !== void 0) {
+    config.routing = {
+      ...config.routing,
+      forceInherit: process.env.OMC_ROUTING_FORCE_INHERIT === "true"
+    };
+  }
+  if (process.env.OMC_ROUTING_DEFAULT_TIER) {
+    const tier = process.env.OMC_ROUTING_DEFAULT_TIER.toUpperCase();
+    if (tier === "LOW" || tier === "MEDIUM" || tier === "HIGH") {
+      config.routing = {
+        ...config.routing,
+        defaultTier: tier
+      };
+    }
+  }
+  const aliasKeys = ["HAIKU", "SONNET", "OPUS"];
+  const modelAliases = {};
+  for (const key of aliasKeys) {
+    const envVal = process.env[`OMC_MODEL_ALIAS_${key}`];
+    if (envVal) {
+      const lower = key.toLowerCase();
+      modelAliases[lower] = envVal.toLowerCase();
+    }
+  }
+  if (Object.keys(modelAliases).length > 0) {
+    config.routing = {
+      ...config.routing,
+      modelAliases
+    };
+  }
+  if (process.env.OMC_ESCALATION_ENABLED !== void 0) {
+    config.routing = {
+      ...config.routing,
+      escalationEnabled: process.env.OMC_ESCALATION_ENABLED === "true"
+    };
+  }
+  const externalModelsDefaults = {};
+  if (process.env.OMC_EXTERNAL_MODELS_DEFAULT_PROVIDER) {
+    const provider = process.env.OMC_EXTERNAL_MODELS_DEFAULT_PROVIDER;
+    if (provider === "codex" || provider === "gemini") {
+      externalModelsDefaults.provider = provider;
+    }
+  }
+  if (process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL) {
+    externalModelsDefaults.codexModel = process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL;
+  } else if (process.env.OMC_CODEX_DEFAULT_MODEL) {
+    externalModelsDefaults.codexModel = process.env.OMC_CODEX_DEFAULT_MODEL;
+  }
+  if (process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL) {
+    externalModelsDefaults.geminiModel = process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL;
+  } else if (process.env.OMC_GEMINI_DEFAULT_MODEL) {
+    externalModelsDefaults.geminiModel = process.env.OMC_GEMINI_DEFAULT_MODEL;
+  }
+  const externalModelsFallback = {
+    onModelFailure: "provider_chain"
+  };
+  if (process.env.OMC_EXTERNAL_MODELS_FALLBACK_POLICY) {
+    const policy = process.env.OMC_EXTERNAL_MODELS_FALLBACK_POLICY;
+    if (policy === "provider_chain" || policy === "cross_provider" || policy === "claude_only") {
+      externalModelsFallback.onModelFailure = policy;
+    }
+  }
+  if (Object.keys(externalModelsDefaults).length > 0 || externalModelsFallback.onModelFailure !== "provider_chain") {
+    config.externalModels = {
+      defaults: externalModelsDefaults,
+      fallbackPolicy: externalModelsFallback
+    };
+  }
+  if (process.env.OMC_DELEGATION_ROUTING_ENABLED !== void 0) {
+    config.delegationRouting = {
+      ...config.delegationRouting,
+      enabled: process.env.OMC_DELEGATION_ROUTING_ENABLED === "true"
+    };
+  }
+  if (process.env.OMC_DELEGATION_ROUTING_DEFAULT_PROVIDER) {
+    const provider = process.env.OMC_DELEGATION_ROUTING_DEFAULT_PROVIDER;
+    if (["claude", "codex", "gemini"].includes(provider)) {
+      config.delegationRouting = {
+        ...config.delegationRouting,
+        defaultProvider: provider
+      };
+    }
+  }
+  return config;
+}
+function warnOnDeprecatedDelegationRouting(config) {
+  const deprecatedProviders = /* @__PURE__ */ new Set();
+  const defaultProvider = config.delegationRouting?.defaultProvider;
+  if (defaultProvider === "codex" || defaultProvider === "gemini") {
+    deprecatedProviders.add(defaultProvider);
+  }
+  const roles = config.delegationRouting?.roles ?? {};
+  for (const route of Object.values(roles)) {
+    const provider = route?.provider;
+    if (provider === "codex" || provider === "gemini") {
+      deprecatedProviders.add(provider);
+    }
+  }
+  if (deprecatedProviders.size === 0) {
+    return;
+  }
+  console.warn(
+    "[OMC] delegationRouting to Codex/Gemini is deprecated and falls back to Claude Task. Use /team for Codex/Gemini CLI workers instead."
+  );
+}
+function loadConfig() {
+  const paths = getConfigPaths();
+  let config = buildDefaultConfig();
+  const userConfig = loadJsoncFile(paths.user);
+  if (userConfig) {
+    config = deepMerge(config, userConfig);
+  }
+  const projectConfig = loadJsoncFile(paths.project);
+  if (projectConfig) {
+    config = deepMerge(config, projectConfig);
+  }
+  const envConfig = loadEnvConfig();
+  config = deepMerge(config, envConfig);
+  if (config.routing?.forceInherit !== true && process.env.OMC_ROUTING_FORCE_INHERIT === void 0 && isNonClaudeProvider()) {
+    config.routing = {
+      ...config.routing,
+      forceInherit: true
+    };
+  }
+  warnOnDeprecatedDelegationRouting(config);
+  return config;
+}
+var import_fs3, import_path5, DEFAULT_CONFIG;
+var init_loader = __esm({
+  "src/config/loader.ts"() {
+    "use strict";
+    import_fs3 = require("fs");
+    import_path5 = require("path");
+    init_paths();
+    init_jsonc();
+    init_models();
+    DEFAULT_CONFIG = buildDefaultConfig();
+  }
+});
+
+// src/utils/skininthegamebros-user.ts
+var init_skininthegamebros_user = __esm({
+  "src/utils/skininthegamebros-user.ts"() {
+    "use strict";
+  }
+});
+
+// src/agents/skininthegamebros-guidance.ts
+var init_skininthegamebros_guidance = __esm({
+  "src/agents/skininthegamebros-guidance.ts"() {
+    "use strict";
+    init_skininthegamebros_user();
+  }
+});
+
+// src/agents/architect.ts
+var ARCHITECT_PROMPT_METADATA, architectAgent;
+var init_architect = __esm({
+  "src/agents/architect.ts"() {
+    "use strict";
+    init_utils();
+    ARCHITECT_PROMPT_METADATA = {
+      category: "advisor",
+      cost: "EXPENSIVE",
+      promptAlias: "architect",
+      triggers: [
+        { domain: "Architecture decisions", trigger: "Multi-system tradeoffs, unfamiliar patterns" },
+        { domain: "Self-review", trigger: "After completing significant implementation" },
+        { domain: "Hard debugging", trigger: "After 2+ failed fix attempts" }
+      ],
+      useWhen: [
+        "Complex architecture design",
+        "After completing significant work",
+        "2+ failed fix attempts",
+        "Unfamiliar code patterns",
+        "Security/performance concerns",
+        "Multi-system tradeoffs"
+      ],
+      avoidWhen: [
+        "Simple file operations (use direct tools)",
+        "First attempt at any fix (try yourself first)",
+        "Questions answerable from code you've read",
+        "Trivial decisions (variable names, formatting)",
+        "Things you can infer from existing code patterns"
+      ]
+    };
+    architectAgent = {
+      name: "architect",
+      description: "Read-only consultation agent. High-IQ reasoning specialist for debugging hard problems and high-difficulty architecture design.",
+      prompt: loadAgentPrompt("architect"),
+      model: "opus",
+      defaultModel: "opus",
+      metadata: ARCHITECT_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/designer.ts
+var FRONTEND_ENGINEER_PROMPT_METADATA, designerAgent;
+var init_designer = __esm({
+  "src/agents/designer.ts"() {
+    "use strict";
+    init_utils();
+    FRONTEND_ENGINEER_PROMPT_METADATA = {
+      category: "specialist",
+      cost: "CHEAP",
+      promptAlias: "designer",
+      triggers: [
+        {
+          domain: "UI/UX",
+          trigger: "Visual changes, styling, components, accessibility"
+        },
+        {
+          domain: "Design",
+          trigger: "Layout, animations, responsive design"
+        }
+      ],
+      useWhen: [
+        "Visual styling or layout changes",
+        "Component design or refactoring",
+        "Animation implementation",
+        "Accessibility improvements",
+        "Responsive design work"
+      ],
+      avoidWhen: [
+        "Pure logic changes in frontend files",
+        "Backend/API work",
+        "Non-visual refactoring"
+      ]
+    };
+    designerAgent = {
+      name: "designer",
+      description: `Designer-turned-developer who crafts stunning UI/UX even without design mockups. Use for VISUAL changes only (styling, layout, animation). Pure logic changes in frontend files should be handled directly.`,
+      prompt: loadAgentPrompt("designer"),
+      model: "sonnet",
+      defaultModel: "sonnet",
+      metadata: FRONTEND_ENGINEER_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/writer.ts
+var DOCUMENT_WRITER_PROMPT_METADATA, writerAgent;
+var init_writer = __esm({
+  "src/agents/writer.ts"() {
+    "use strict";
+    init_utils();
+    DOCUMENT_WRITER_PROMPT_METADATA = {
+      category: "specialist",
+      cost: "FREE",
+      promptAlias: "writer",
+      triggers: [
+        {
+          domain: "Documentation",
+          trigger: "README, API docs, guides, comments"
+        }
+      ],
+      useWhen: [
+        "Creating or updating README files",
+        "Writing API documentation",
+        "Creating user guides or tutorials",
+        "Adding code comments or JSDoc",
+        "Architecture documentation"
+      ],
+      avoidWhen: [
+        "Code implementation tasks",
+        "Bug fixes",
+        "Non-documentation tasks"
+      ]
+    };
+    writerAgent = {
+      name: "writer",
+      description: `Technical writer who crafts clear, comprehensive documentation. Specializes in README files, API docs, architecture docs, and user guides.`,
+      prompt: loadAgentPrompt("writer"),
+      model: "haiku",
+      defaultModel: "haiku",
+      metadata: DOCUMENT_WRITER_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/critic.ts
+var CRITIC_PROMPT_METADATA, criticAgent;
+var init_critic = __esm({
+  "src/agents/critic.ts"() {
+    "use strict";
+    init_utils();
+    CRITIC_PROMPT_METADATA = {
+      category: "reviewer",
+      cost: "EXPENSIVE",
+      promptAlias: "critic",
+      triggers: [
+        {
+          domain: "Plan Review",
+          trigger: "Evaluating work plans before execution"
+        }
+      ],
+      useWhen: [
+        "After planner creates a work plan",
+        "Before executing a complex plan",
+        "When plan quality validation is needed",
+        "To catch gaps before implementation"
+      ],
+      avoidWhen: [
+        "Simple, straightforward tasks",
+        "When no plan exists to review",
+        "During implementation phase"
+      ]
+    };
+    criticAgent = {
+      name: "critic",
+      description: `Expert reviewer for evaluating work plans against rigorous clarity, verifiability, and completeness standards. Use after planner creates a work plan to validate it before execution.`,
+      prompt: loadAgentPrompt("critic"),
+      model: "opus",
+      defaultModel: "opus",
+      metadata: CRITIC_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/analyst.ts
+var ANALYST_PROMPT_METADATA, analystAgent;
+var init_analyst = __esm({
+  "src/agents/analyst.ts"() {
+    "use strict";
+    init_utils();
+    ANALYST_PROMPT_METADATA = {
+      category: "planner",
+      cost: "EXPENSIVE",
+      promptAlias: "analyst",
+      triggers: [
+        {
+          domain: "Pre-Planning",
+          trigger: "Hidden requirements, edge cases, risk analysis"
+        }
+      ],
+      useWhen: [
+        "Before creating a work plan",
+        "When requirements seem incomplete",
+        "To identify hidden assumptions",
+        "Risk analysis before implementation",
+        "Scope validation"
+      ],
+      avoidWhen: [
+        "Simple, well-defined tasks",
+        "During implementation phase",
+        "When plan already reviewed"
+      ]
+    };
+    analystAgent = {
+      name: "analyst",
+      description: `Pre-planning consultant that analyzes requests before implementation to identify hidden requirements, edge cases, and potential risks. Use before creating a work plan.`,
+      prompt: loadAgentPrompt("analyst"),
+      model: "opus",
+      defaultModel: "opus",
+      metadata: ANALYST_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/executor.ts
+var EXECUTOR_PROMPT_METADATA, executorAgent;
+var init_executor = __esm({
+  "src/agents/executor.ts"() {
+    "use strict";
+    init_utils();
+    EXECUTOR_PROMPT_METADATA = {
+      category: "specialist",
+      cost: "CHEAP",
+      promptAlias: "Junior",
+      triggers: [
+        { domain: "Direct implementation", trigger: "Single-file changes, focused tasks" },
+        { domain: "Bug fixes", trigger: "Clear, scoped fixes" },
+        { domain: "Small features", trigger: "Well-defined, isolated work" }
+      ],
+      useWhen: [
+        "Direct, focused implementation tasks",
+        "Single-file or few-file changes",
+        "When delegation overhead isn't worth it",
+        "Clear, well-scoped work items"
+      ],
+      avoidWhen: [
+        "Multi-file refactoring (use orchestrator)",
+        "Tasks requiring research (use explore/document-specialist first)",
+        "Complex decisions (consult architect)"
+      ]
+    };
+    executorAgent = {
+      name: "executor",
+      description: "Focused task executor. Execute tasks directly. NEVER delegate or spawn other agents. Same discipline as OMC, no delegation.",
+      prompt: loadAgentPrompt("executor"),
+      model: "sonnet",
+      defaultModel: "sonnet",
+      metadata: EXECUTOR_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/planner.ts
+var PLANNER_PROMPT_METADATA, plannerAgent;
+var init_planner = __esm({
+  "src/agents/planner.ts"() {
+    "use strict";
+    init_utils();
+    PLANNER_PROMPT_METADATA = {
+      category: "planner",
+      cost: "EXPENSIVE",
+      promptAlias: "planner",
+      triggers: [
+        {
+          domain: "Strategic Planning",
+          trigger: "Comprehensive work plans, interview-style consultation"
+        }
+      ],
+      useWhen: [
+        "Complex features requiring planning",
+        "When requirements need clarification through interview",
+        "Creating comprehensive work plans",
+        "Before large implementation efforts"
+      ],
+      avoidWhen: [
+        "Simple, straightforward tasks",
+        "When implementation should just start",
+        "When a plan already exists"
+      ]
+    };
+    plannerAgent = {
+      name: "planner",
+      description: `Strategic planning consultant. Interviews users to understand requirements, then creates comprehensive work plans. NEVER implements - only plans.`,
+      prompt: loadAgentPrompt("planner"),
+      model: "opus",
+      defaultModel: "opus",
+      metadata: PLANNER_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/qa-tester.ts
+var QA_TESTER_PROMPT_METADATA, qaTesterAgent;
+var init_qa_tester = __esm({
+  "src/agents/qa-tester.ts"() {
+    "use strict";
+    init_utils();
+    QA_TESTER_PROMPT_METADATA = {
+      category: "specialist",
+      cost: "CHEAP",
+      promptAlias: "QATester",
+      triggers: [
+        { domain: "CLI testing", trigger: "Testing command-line applications" },
+        { domain: "Service testing", trigger: "Starting and testing background services" },
+        { domain: "Integration testing", trigger: "End-to-end CLI workflow verification" },
+        { domain: "Interactive testing", trigger: "Testing applications requiring user input" }
+      ],
+      useWhen: [
+        "Testing CLI applications that need interactive input",
+        "Starting background services and verifying their behavior",
+        "Running end-to-end tests on command-line tools",
+        "Testing applications that produce streaming output",
+        "Verifying service startup and shutdown behavior"
+      ],
+      avoidWhen: [
+        "Unit testing (use standard test runners)",
+        "API testing without CLI interface (use curl/httpie directly)",
+        "Static code analysis (use architect or explore)"
+      ]
+    };
+    qaTesterAgent = {
+      name: "qa-tester",
+      description: "Interactive CLI testing specialist using tmux. Tests CLI applications, background services, and interactive tools. Manages test sessions, sends commands, verifies output, and ensures cleanup.",
+      prompt: loadAgentPrompt("qa-tester"),
+      model: "sonnet",
+      defaultModel: "sonnet",
+      metadata: QA_TESTER_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/scientist.ts
+var SCIENTIST_PROMPT_METADATA, scientistAgent;
+var init_scientist = __esm({
+  "src/agents/scientist.ts"() {
+    "use strict";
+    init_utils();
+    SCIENTIST_PROMPT_METADATA = {
+      category: "specialist",
+      cost: "CHEAP",
+      promptAlias: "scientist",
+      triggers: [
+        { domain: "Data analysis", trigger: "Analyzing datasets and computing statistics" },
+        { domain: "Research execution", trigger: "Running data experiments and generating findings" },
+        { domain: "Python data work", trigger: "Using pandas, numpy, scipy for data tasks" },
+        { domain: "EDA", trigger: "Exploratory data analysis on files" },
+        { domain: "Hypothesis testing", trigger: "Statistical tests with confidence intervals and effect sizes" },
+        { domain: "Research stages", trigger: "Multi-stage analysis with structured markers" }
+      ],
+      useWhen: [
+        "Analyzing CSV, JSON, Parquet, or other data files",
+        "Computing descriptive statistics or aggregations",
+        "Performing exploratory data analysis (EDA)",
+        "Generating data-driven findings and insights",
+        "Simple ML tasks like clustering or regression",
+        "Data transformations and feature engineering",
+        "Generating data analysis reports with visualizations",
+        "Hypothesis testing with statistical evidence markers",
+        "Research stages with [STAGE:*] markers for orchestration"
+      ],
+      avoidWhen: [
+        "Researching external documentation or APIs (use document-specialist)",
+        "Implementing production code features (use executor)",
+        "Architecture or system design questions (use architect)",
+        "No data files to analyze - just theoretical questions",
+        "Web scraping or external data fetching (use document-specialist)"
+      ]
+    };
+    scientistAgent = {
+      name: "scientist",
+      description: "Data analysis and research execution specialist. Executes Python code for EDA, statistical analysis, and generating data-driven findings. Works with CSV, JSON, Parquet files using pandas, numpy, scipy.",
+      prompt: loadAgentPrompt("scientist"),
+      model: "sonnet",
+      defaultModel: "sonnet",
+      metadata: SCIENTIST_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/explore.ts
+var EXPLORE_PROMPT_METADATA, exploreAgent;
+var init_explore = __esm({
+  "src/agents/explore.ts"() {
+    "use strict";
+    init_utils();
+    EXPLORE_PROMPT_METADATA = {
+      category: "exploration",
+      cost: "CHEAP",
+      promptAlias: "Explore",
+      triggers: [
+        { domain: "Internal codebase search", trigger: "Finding implementations, patterns, files" },
+        { domain: "Project structure", trigger: "Understanding code organization" },
+        { domain: "Code discovery", trigger: "Locating specific code by pattern" }
+      ],
+      useWhen: [
+        "Finding files by pattern or name",
+        "Searching for implementations in current project",
+        "Understanding project structure",
+        "Locating code by content or pattern",
+        "Quick codebase exploration"
+      ],
+      avoidWhen: [
+        "External documentation, literature, or academic paper lookup (use document-specialist)",
+        "Database/reference/manual lookups outside the current project (use document-specialist)",
+        "GitHub/npm package research (use document-specialist)",
+        "Complex architectural analysis (use architect)",
+        "When you already know the file location"
+      ]
+    };
+    exploreAgent = {
+      name: "explore",
+      description: "Fast codebase exploration and pattern search. Use for finding files, understanding structure, locating implementations. Searches INTERNAL codebase only; external docs, literature, papers, and reference databases belong to document-specialist.",
+      prompt: loadAgentPrompt("explore"),
+      model: "haiku",
+      defaultModel: "haiku",
+      metadata: EXPLORE_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/tracer.ts
+var TRACER_PROMPT_METADATA, tracerAgent;
+var init_tracer = __esm({
+  "src/agents/tracer.ts"() {
+    "use strict";
+    init_utils();
+    TRACER_PROMPT_METADATA = {
+      category: "advisor",
+      cost: "EXPENSIVE",
+      promptAlias: "tracer",
+      triggers: [
+        { domain: "Causal tracing", trigger: "Why did this happen? Which explanation best fits the evidence?" },
+        { domain: "Forensic analysis", trigger: "Observed output, artifact, or behavior needs ranked explanations" },
+        { domain: "Evidence-driven uncertainty reduction", trigger: "Need competing hypotheses and the next best probe" }
+      ],
+      useWhen: [
+        "Tracing ambiguous runtime behavior, regressions, or orchestration outcomes",
+        "Ranking competing explanations for an observed result",
+        "Separating observation, evidence, and inference",
+        "Explaining performance, architecture, scientific, or configuration outcomes",
+        "Identifying the next probe that would collapse uncertainty fastest"
+      ],
+      avoidWhen: [
+        "The task is pure implementation or fixing (use executor/debugger)",
+        "The task is a generic summary without causal analysis",
+        "A single-file code search is enough (use explore)",
+        "You already have decisive evidence and only need execution"
+      ]
+    };
+    tracerAgent = {
+      name: "tracer",
+      description: "Evidence-driven causal tracing specialist. Explains observed outcomes using competing hypotheses, evidence for and against, uncertainty tracking, and next-probe recommendations.",
+      prompt: loadAgentPrompt("tracer"),
+      model: "sonnet",
+      defaultModel: "sonnet",
+      metadata: TRACER_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/document-specialist.ts
+var DOCUMENT_SPECIALIST_PROMPT_METADATA, documentSpecialistAgent;
+var init_document_specialist = __esm({
+  "src/agents/document-specialist.ts"() {
+    "use strict";
+    init_utils();
+    DOCUMENT_SPECIALIST_PROMPT_METADATA = {
+      category: "exploration",
+      cost: "CHEAP",
+      promptAlias: "document-specialist",
+      triggers: [
+        {
+          domain: "Project documentation",
+          trigger: "README, docs/, migration guides, local references"
+        },
+        {
+          domain: "External documentation",
+          trigger: "API references, official docs"
+        },
+        {
+          domain: "API/framework correctness",
+          trigger: "Context Hub / chub first when available; curated backend fallback otherwise"
+        },
+        {
+          domain: "OSS implementations",
+          trigger: "GitHub examples, package source"
+        },
+        {
+          domain: "Best practices",
+          trigger: "Community patterns, recommendations"
+        },
+        {
+          domain: "Literature and reference research",
+          trigger: "Academic papers, manuals, reference databases"
+        }
+      ],
+      useWhen: [
+        "Checking README/docs/local reference files before broader research",
+        "Looking up official documentation",
+        "Using Context Hub / chub (or another curated docs backend) for external API/framework correctness when available",
+        "Finding GitHub examples",
+        "Researching npm/pip packages",
+        "Stack Overflow solutions",
+        "External API references",
+        "Searching external literature or academic papers",
+        "Looking up manuals, databases, or reference material outside the current project"
+      ],
+      avoidWhen: [
+        "Internal codebase implementation search (use explore)",
+        "Current project source files when the task is code discovery rather than documentation lookup (use explore)",
+        "When you already have the information"
+      ]
+    };
+    documentSpecialistAgent = {
+      name: "document-specialist",
+      description: "Document Specialist for documentation research and reference finding. Use for local repo docs, official docs, Context Hub / chub or other curated docs backends for API/framework correctness, GitHub examples, OSS implementations, external literature, academic papers, and reference/database lookups. Avoid internal implementation search; use explore for code discovery.",
+      prompt: loadAgentPrompt("document-specialist"),
+      model: "sonnet",
+      defaultModel: "sonnet",
+      metadata: DOCUMENT_SPECIALIST_PROMPT_METADATA
+    };
+  }
+});
+
+// src/agents/definitions.ts
+var debuggerAgent, verifierAgent, testEngineerAgent, securityReviewerAgent, codeReviewerAgent, gitMasterAgent, codeSimplifierAgent;
+var init_definitions = __esm({
+  "src/agents/definitions.ts"() {
+    "use strict";
+    init_utils();
+    init_loader();
+    init_skininthegamebros_guidance();
+    init_architect();
+    init_designer();
+    init_writer();
+    init_critic();
+    init_analyst();
+    init_executor();
+    init_planner();
+    init_qa_tester();
+    init_scientist();
+    init_explore();
+    init_tracer();
+    init_document_specialist();
+    init_architect();
+    init_designer();
+    init_writer();
+    init_critic();
+    init_analyst();
+    init_executor();
+    init_planner();
+    init_qa_tester();
+    init_scientist();
+    init_explore();
+    init_tracer();
+    init_document_specialist();
+    debuggerAgent = {
+      name: "debugger",
+      description: "Root-cause analysis, regression isolation, failure diagnosis (Sonnet).",
+      prompt: loadAgentPrompt("debugger"),
+      model: "sonnet",
+      defaultModel: "sonnet"
+    };
+    verifierAgent = {
+      name: "verifier",
+      description: "Completion evidence, claim validation, test adequacy (Sonnet).",
+      prompt: loadAgentPrompt("verifier"),
+      model: "sonnet",
+      defaultModel: "sonnet"
+    };
+    testEngineerAgent = {
+      name: "test-engineer",
+      description: "Test strategy, coverage, flaky test hardening (Sonnet).",
+      prompt: loadAgentPrompt("test-engineer"),
+      model: "sonnet",
+      defaultModel: "sonnet"
+    };
+    securityReviewerAgent = {
+      name: "security-reviewer",
+      description: "Security vulnerability detection specialist (Sonnet). Use for security audits and OWASP detection.",
+      prompt: loadAgentPrompt("security-reviewer"),
+      model: "sonnet",
+      defaultModel: "sonnet"
+    };
+    codeReviewerAgent = {
+      name: "code-reviewer",
+      description: "Expert code review specialist (Opus). Use for comprehensive code quality review.",
+      prompt: loadAgentPrompt("code-reviewer"),
+      model: "opus",
+      defaultModel: "opus"
+    };
+    gitMasterAgent = {
+      name: "git-master",
+      description: "Git expert for atomic commits, rebasing, and history management with style detection",
+      prompt: loadAgentPrompt("git-master"),
+      model: "sonnet",
+      defaultModel: "sonnet"
+    };
+    codeSimplifierAgent = {
+      name: "code-simplifier",
+      description: "Simplifies and refines code for clarity, consistency, and maintainability (Opus).",
+      prompt: loadAgentPrompt("code-simplifier"),
+      model: "opus",
+      defaultModel: "opus"
+    };
+  }
+});
+
+// src/features/delegation-routing/types.ts
+var init_types = __esm({
+  "src/features/delegation-routing/types.ts"() {
+    "use strict";
+  }
+});
+
+// src/features/delegation-enforcer.ts
+function normalizeToCcAlias(model) {
+  const family = resolveClaudeFamily(model);
+  return family ? FAMILY_TO_ALIAS[family] ?? model : model;
+}
+var FAMILY_TO_ALIAS;
+var init_delegation_enforcer = __esm({
+  "src/features/delegation-enforcer.ts"() {
+    "use strict";
+    init_definitions();
+    init_types();
+    init_loader();
+    init_models();
+    FAMILY_TO_ALIAS = {
+      SONNET: "sonnet",
+      OPUS: "opus",
+      HAIKU: "haiku"
+    };
+  }
+});
+
+// src/lib/security-config.ts
+function loadSecurityFromConfigFiles() {
+  const paths = [
+    (0, import_path6.join)(process.cwd(), ".claude", "omc.jsonc"),
+    (0, import_path6.join)(getConfigDir(), "claude-omc", "config.jsonc")
+  ];
+  for (const configPath of paths) {
+    if (!(0, import_fs4.existsSync)(configPath)) continue;
+    try {
+      const content = (0, import_fs4.readFileSync)(configPath, "utf-8");
+      const parsed = parseJsonc(content);
+      if (parsed?.security && typeof parsed.security === "object") {
+        return parsed.security;
+      }
+    } catch {
+    }
+  }
+  return {};
+}
+function getSecurityConfig() {
+  if (cachedConfig) return cachedConfig;
+  const isStrict = process.env.OMC_SECURITY === "strict";
+  const base = isStrict ? { ...STRICT_OVERRIDES } : { ...DEFAULTS };
+  const fileOverrides = loadSecurityFromConfigFiles();
+  if (isStrict) {
+    cachedConfig = {
+      restrictToolPaths: base.restrictToolPaths || (fileOverrides.restrictToolPaths ?? false),
+      pythonSandbox: base.pythonSandbox || (fileOverrides.pythonSandbox ?? false),
+      disableProjectSkills: base.disableProjectSkills || (fileOverrides.disableProjectSkills ?? false),
+      disableAutoUpdate: base.disableAutoUpdate || (fileOverrides.disableAutoUpdate ?? false),
+      disableRemoteMcp: base.disableRemoteMcp || (fileOverrides.disableRemoteMcp ?? false),
+      disableExternalLLM: base.disableExternalLLM || (fileOverrides.disableExternalLLM ?? false),
+      hardMaxIterations: Math.min(base.hardMaxIterations, typeof fileOverrides.hardMaxIterations === "number" && fileOverrides.hardMaxIterations > 0 ? fileOverrides.hardMaxIterations : base.hardMaxIterations)
+    };
+  } else {
+    cachedConfig = {
+      restrictToolPaths: fileOverrides.restrictToolPaths ?? base.restrictToolPaths,
+      pythonSandbox: fileOverrides.pythonSandbox ?? base.pythonSandbox,
+      disableProjectSkills: fileOverrides.disableProjectSkills ?? base.disableProjectSkills,
+      disableAutoUpdate: fileOverrides.disableAutoUpdate ?? base.disableAutoUpdate,
+      disableRemoteMcp: fileOverrides.disableRemoteMcp ?? base.disableRemoteMcp,
+      disableExternalLLM: fileOverrides.disableExternalLLM ?? base.disableExternalLLM,
+      hardMaxIterations: fileOverrides.hardMaxIterations ?? base.hardMaxIterations
+    };
+  }
+  return cachedConfig;
+}
+function isExternalLLMDisabled() {
+  return getSecurityConfig().disableExternalLLM;
+}
+var import_fs4, import_path6, DEFAULTS, STRICT_OVERRIDES, cachedConfig;
+var init_security_config = __esm({
+  "src/lib/security-config.ts"() {
+    "use strict";
+    import_fs4 = require("fs");
+    import_path6 = require("path");
+    init_jsonc();
+    init_paths();
+    DEFAULTS = {
+      restrictToolPaths: false,
+      pythonSandbox: false,
+      disableProjectSkills: false,
+      disableAutoUpdate: false,
+      hardMaxIterations: 500,
+      disableRemoteMcp: false,
+      disableExternalLLM: false
+    };
+    STRICT_OVERRIDES = {
+      restrictToolPaths: true,
+      pythonSandbox: true,
+      disableProjectSkills: true,
+      disableAutoUpdate: true,
+      hardMaxIterations: 200,
+      disableRemoteMcp: true,
+      disableExternalLLM: true
+    };
+    cachedConfig = null;
+  }
+});
+
+// src/team/model-contract.ts
+var model_contract_exports = {};
+__export(model_contract_exports, {
+  _testInternals: () => _testInternals,
+  buildLaunchArgs: () => buildLaunchArgs,
+  buildWorkerArgv: () => buildWorkerArgv,
+  buildWorkerCommand: () => buildWorkerCommand,
+  clearResolvedPathCache: () => clearResolvedPathCache,
+  getContract: () => getContract,
+  getPromptModeArgs: () => getPromptModeArgs,
+  getRegisteredTypes: () => getRegisteredTypes,
+  getWorkerEnv: () => getWorkerEnv,
+  isBuiltinType: () => isBuiltinType,
+  isCliAvailable: () => isCliAvailable,
+  isPromptModeAgent: () => isPromptModeAgent,
+  parseCliOutput: () => parseCliOutput,
+  registerContract: () => registerContract,
+  resolveClaudeWorkerModel: () => resolveClaudeWorkerModel,
+  resolveCliBinaryPath: () => resolveCliBinaryPath,
+  resolveValidatedBinaryPath: () => resolveValidatedBinaryPath,
+  shouldLoadShellRc: () => shouldLoadShellRc,
+  validateCliAvailable: () => validateCliAvailable,
+  validateCliBinaryPath: () => validateCliBinaryPath
+});
+function getTrustedPrefixes() {
+  const trusted = [
+    "/usr/local/bin",
+    "/usr/bin",
+    "/opt/homebrew/"
+  ];
+  const home = process.env.HOME;
+  if (home) {
+    trusted.push(`${home}/.local/bin`);
+    trusted.push(`${home}/.nvm/`);
+    trusted.push(`${home}/.cargo/bin`);
+  }
+  const custom = (process.env.OMC_TRUSTED_CLI_DIRS ?? "").split(":").map((part) => part.trim()).filter(Boolean).filter((part) => (0, import_path7.isAbsolute)(part));
+  trusted.push(...custom);
+  return trusted;
+}
+function isTrustedPrefix(resolvedPath) {
+  const normalized = (0, import_path7.normalize)(resolvedPath);
+  return getTrustedPrefixes().some((prefix) => normalized.startsWith((0, import_path7.normalize)(prefix)));
+}
+function assertBinaryName(binary) {
+  if (!/^[A-Za-z0-9._-]+$/.test(binary)) {
+    throw new Error(`Invalid CLI binary name: ${binary}`);
+  }
+}
+function shouldLoadShellRc() {
+  return false;
+}
+function resolveCliBinaryPath(binary) {
+  assertBinaryName(binary);
+  const cached = resolvedPathCache.get(binary);
+  if (cached) return cached;
+  const finder = process.platform === "win32" ? "where" : "which";
+  const result = (0, import_child_process2.spawnSync)(finder, [binary], {
+    timeout: 5e3,
+    env: process.env
+  });
+  if (result.status !== 0) {
+    throw new Error(`CLI binary '${binary}' not found in PATH`);
+  }
+  const stdout = result.stdout?.toString().trim() ?? "";
+  const firstLine = stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  if (!firstLine) {
+    throw new Error(`CLI binary '${binary}' not found in PATH`);
+  }
+  const resolvedPath = (0, import_path7.normalize)(firstLine);
+  if (!(0, import_path7.isAbsolute)(resolvedPath)) {
+    throw new Error(`Resolved CLI binary '${binary}' to relative path`);
+  }
+  if (UNTRUSTED_PATH_PATTERNS.some((pattern) => pattern.test(resolvedPath))) {
+    throw new Error(`Resolved CLI binary '${binary}' to untrusted location: ${resolvedPath}`);
+  }
+  if (!isTrustedPrefix(resolvedPath)) {
+    console.warn(`[omc:cli-security] CLI binary '${binary}' resolved to non-standard path: ${resolvedPath}`);
+  }
+  resolvedPathCache.set(binary, resolvedPath);
+  return resolvedPath;
+}
+function clearResolvedPathCache() {
+  resolvedPathCache.clear();
+}
+function validateCliBinaryPath(binary) {
+  try {
+    const resolvedPath = resolveCliBinaryPath(binary);
+    return { valid: true, binary, resolvedPath };
+  } catch (error) {
+    return {
+      valid: false,
+      binary,
+      reason: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+function isBuiltinType(type) {
+  return ["claude", "codex", "gemini"].includes(type);
+}
+function registerContract(contract) {
+  validateBinaryRef(contract.binary);
+  CONTRACTS.set(contract.agentType, contract);
+}
+function getRegisteredTypes() {
+  return [...CONTRACTS.keys()];
+}
+function getContract(agentType) {
+  let contract = CONTRACTS.get(agentType);
+  if (!contract && !isBuiltinType(agentType)) {
+    try {
+      const pluginModule = cjsRequire("../plugins/index.js");
+      pluginModule.ensurePluginsLoaded?.();
+    } catch {
+    }
+    contract = CONTRACTS.get(agentType);
+  }
+  if (!contract) {
+    throw new Error(`Unknown agent type: ${agentType}. Available: ${[...CONTRACTS.keys()].join(", ")}`);
+  }
+  if (!isBuiltinType(agentType) && isExternalLLMDisabled()) {
+    throw new Error(
+      `External LLM provider "${agentType}" is blocked by security policy (disableExternalLLM). Only Claude workers are allowed in the current security configuration.`
+    );
+  }
+  return contract;
+}
+function validateBinaryRef(binary) {
+  if ((0, import_path7.isAbsolute)(binary)) return;
+  if (/^[A-Za-z0-9._-]+$/.test(binary)) return;
+  throw new Error(`Unsafe CLI binary reference: ${binary}`);
+}
+function resolveBinaryPath(binary) {
+  validateBinaryRef(binary);
+  if ((0, import_path7.isAbsolute)(binary)) return binary;
+  try {
+    const resolver = process.platform === "win32" ? "where" : "which";
+    const result = (0, import_child_process2.spawnSync)(resolver, [binary], { timeout: 5e3, encoding: "utf8" });
+    if (result.status !== 0) return binary;
+    const lines = result.stdout?.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) ?? [];
+    const firstPath = lines[0];
+    const isResolvedAbsolute = !!firstPath && ((0, import_path7.isAbsolute)(firstPath) || import_path7.win32.isAbsolute(firstPath));
+    return isResolvedAbsolute ? firstPath : binary;
+  } catch {
+    return binary;
+  }
+}
+function isCliAvailable(agentType) {
+  const contract = getContract(agentType);
+  try {
+    const resolvedBinary = resolveBinaryPath(contract.binary);
+    if (process.platform === "win32" && /\.(cmd|bat)$/i.test(resolvedBinary)) {
+      const comspec = process.env.COMSPEC || "cmd.exe";
+      const result2 = (0, import_child_process2.spawnSync)(comspec, ["/d", "/s", "/c", `"${resolvedBinary}" --version`], { timeout: 5e3 });
+      return result2.status === 0;
+    }
+    const result = (0, import_child_process2.spawnSync)(resolvedBinary, ["--version"], {
+      timeout: 5e3,
+      shell: process.platform === "win32"
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+function validateCliAvailable(agentType) {
+  if (!isCliAvailable(agentType)) {
+    const contract = getContract(agentType);
+    throw new Error(
+      `CLI agent '${agentType}' not found. ${contract.installInstructions}`
+    );
+  }
+}
+function resolveValidatedBinaryPath(agentType) {
+  const contract = getContract(agentType);
+  return resolveCliBinaryPath(contract.binary);
+}
+function buildLaunchArgs(agentType, config) {
+  return getContract(agentType).buildLaunchArgs(config.model, config.extraFlags);
+}
+function buildWorkerArgv(agentType, config) {
+  validateTeamName(config.teamName);
+  const contract = getContract(agentType);
+  const binary = config.resolvedBinaryPath ? (() => {
+    validateBinaryRef(config.resolvedBinaryPath);
+    return config.resolvedBinaryPath;
+  })() : resolveBinaryPath(contract.binary);
+  const args = buildLaunchArgs(agentType, config);
+  return [binary, ...args];
+}
+function buildWorkerCommand(agentType, config) {
+  return buildWorkerArgv(agentType, config).map((part) => `'${part.replace(/'/g, `'"'"'`)}'`).join(" ");
+}
+function getWorkerEnv(teamName, workerName2, agentType, env = process.env) {
+  validateTeamName(teamName);
+  const workerEnv = {
+    OMC_TEAM_WORKER: `${teamName}/${workerName2}`,
+    OMC_TEAM_NAME: teamName,
+    OMC_WORKER_AGENT_TYPE: agentType
+  };
+  for (const key of WORKER_MODEL_ENV_ALLOWLIST) {
+    const value = env[key];
+    if (typeof value === "string" && value.length > 0) {
+      workerEnv[key] = value;
+    }
+  }
+  return workerEnv;
+}
+function parseCliOutput(agentType, rawOutput) {
+  return getContract(agentType).parseOutput(rawOutput);
+}
+function isPromptModeAgent(agentType) {
+  const contract = getContract(agentType);
+  return !!contract.supportsPromptMode;
+}
+function resolveClaudeWorkerModel(env = process.env) {
+  if (env.OMC_ROUTING_FORCE_INHERIT === "true") {
+    return void 0;
+  }
+  if (!isBedrock() && !isVertexAI()) {
+    return void 0;
+  }
+  const directModel = env.ANTHROPIC_MODEL || env.CLAUDE_MODEL || "";
+  if (directModel) {
+    return directModel;
+  }
+  const bedrockModel = env.CLAUDE_CODE_BEDROCK_SONNET_MODEL || env.ANTHROPIC_DEFAULT_SONNET_MODEL || "";
+  if (bedrockModel) {
+    return bedrockModel;
+  }
+  const omcModel = env.OMC_MODEL_MEDIUM || "";
+  if (omcModel) {
+    return omcModel;
+  }
+  return void 0;
+}
+function getPromptModeArgs(agentType, instruction) {
+  const contract = getContract(agentType);
+  if (!contract.supportsPromptMode) {
+    return [];
+  }
+  if (contract.promptModeFlag) {
+    return [contract.promptModeFlag, instruction];
+  }
+  return [instruction];
+}
+var import_child_process2, import_node_module, import_path7, import_meta2, cjsRequire, resolvedPathCache, UNTRUSTED_PATH_PATTERNS, _testInternals, CONTRACTS, WORKER_MODEL_ENV_ALLOWLIST;
+var init_model_contract = __esm({
+  "src/team/model-contract.ts"() {
+    "use strict";
+    import_child_process2 = require("child_process");
+    import_node_module = require("node:module");
+    import_path7 = require("path");
+    init_team_name();
+    init_delegation_enforcer();
+    init_models();
+    init_security_config();
+    import_meta2 = {};
+    cjsRequire = (0, import_node_module.createRequire)(import_meta2.url);
+    resolvedPathCache = /* @__PURE__ */ new Map();
+    UNTRUSTED_PATH_PATTERNS = [
+      /^\/tmp(\/|$)/,
+      /^\/var\/tmp(\/|$)/,
+      /^\/dev\/shm(\/|$)/
+    ];
+    _testInternals = {
+      UNTRUSTED_PATH_PATTERNS,
+      getTrustedPrefixes
+    };
+    CONTRACTS = /* @__PURE__ */ new Map();
+    CONTRACTS.set("claude", {
+      agentType: "claude",
+      binary: "claude",
+      installInstructions: "Install Claude CLI: https://claude.ai/download",
+      hints: { startupWaitStrategy: "evidence-file" },
+      buildLaunchArgs(model, extraFlags = []) {
+        const args = ["--dangerously-skip-permissions"];
+        if (model) {
+          const resolved = isProviderSpecificModelId(model) ? model : normalizeToCcAlias(model);
+          args.push("--model", resolved);
+        }
+        return [...args, ...extraFlags];
+      },
+      parseOutput(rawOutput) {
+        return rawOutput.trim();
+      }
+    });
+    CONTRACTS.set("codex", {
+      agentType: "codex",
+      binary: "codex",
+      installInstructions: "Install Codex CLI: npm install -g @openai/codex",
+      supportsPromptMode: true,
+      hints: { modelEnvPrefix: "OMC_CODEX", startupWaitStrategy: "prompt-mode" },
+      buildLaunchArgs(model, extraFlags = []) {
+        const args = ["--dangerously-bypass-approvals-and-sandbox"];
+        if (model) args.push("--model", model);
+        return [...args, ...extraFlags];
+      },
+      parseOutput(rawOutput) {
+        const lines = rawOutput.trim().split("\n").filter(Boolean);
+        for (let i = lines.length - 1; i >= 0; i--) {
+          try {
+            const parsed = JSON.parse(lines[i]);
+            if (parsed.type === "message" && parsed.role === "assistant") {
+              return parsed.content ?? rawOutput;
+            }
+            if (parsed.type === "result" || parsed.output) {
+              return parsed.output ?? parsed.result ?? rawOutput;
+            }
+          } catch {
+          }
+        }
+        return rawOutput.trim();
+      }
+    });
+    CONTRACTS.set("gemini", {
+      agentType: "gemini",
+      binary: "gemini",
+      installInstructions: "Install Gemini CLI: npm install -g @google/gemini-cli",
+      supportsPromptMode: true,
+      promptModeFlag: "-i",
+      hints: { needsTrustConfirm: true, modelEnvPrefix: "OMC_GEMINI", startupWaitStrategy: "prompt-mode" },
+      buildLaunchArgs(model, extraFlags = []) {
+        const args = ["--approval-mode", "yolo"];
+        if (model) args.push("--model", model);
+        return [...args, ...extraFlags];
+      },
+      parseOutput(rawOutput) {
+        return rawOutput.trim();
+      }
+    });
+    WORKER_MODEL_ENV_ALLOWLIST = [
+      "ANTHROPIC_MODEL",
+      "CLAUDE_MODEL",
+      "ANTHROPIC_BASE_URL",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CODE_BEDROCK_OPUS_MODEL",
+      "CLAUDE_CODE_BEDROCK_SONNET_MODEL",
+      "CLAUDE_CODE_BEDROCK_HAIKU_MODEL",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL",
+      "ANTHROPIC_DEFAULT_SONNET_MODEL",
+      "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+      "OMC_MODEL_HIGH",
+      "OMC_MODEL_MEDIUM",
+      "OMC_MODEL_LOW",
+      "OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL",
+      "OMC_CODEX_DEFAULT_MODEL",
+      "OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL",
+      "OMC_GEMINI_DEFAULT_MODEL"
+    ];
+  }
+});
+
 // src/team/tmux-session.ts
 var tmux_session_exports = {};
 __export(tmux_session_exports, {
@@ -1096,1569 +2961,7 @@ var import_promises3 = require("fs/promises");
 var import_path14 = require("path");
 var import_fs11 = require("fs");
 init_tmux_utils();
-
-// src/team/model-contract.ts
-var import_child_process2 = require("child_process");
-var import_path7 = require("path");
-init_team_name();
-
-// src/agents/utils.ts
-var import_fs = require("fs");
-var import_path2 = require("path");
-var import_url = require("url");
-var import_meta = {};
-function getPackageDir() {
-  if (typeof __dirname !== "undefined" && __dirname) {
-    const currentDirName = (0, import_path2.basename)(__dirname);
-    const parentDirName = (0, import_path2.basename)((0, import_path2.dirname)(__dirname));
-    if (currentDirName === "bridge") {
-      return (0, import_path2.join)(__dirname, "..");
-    }
-    if (currentDirName === "agents" && (parentDirName === "src" || parentDirName === "dist")) {
-      return (0, import_path2.join)(__dirname, "..", "..");
-    }
-  }
-  try {
-    const __filename = (0, import_url.fileURLToPath)(import_meta.url);
-    const __dirname2 = (0, import_path2.dirname)(__filename);
-    const currentDirName = (0, import_path2.basename)(__dirname2);
-    if (currentDirName === "bridge") {
-      return (0, import_path2.join)(__dirname2, "..");
-    }
-    return (0, import_path2.join)(__dirname2, "..", "..");
-  } catch {
-  }
-  return process.cwd();
-}
-function stripFrontmatter(content) {
-  const match = content.match(/^---[\s\S]*?---\s*([\s\S]*)$/);
-  return match ? match[1].trim() : content.trim();
-}
-function loadAgentPrompt(agentName) {
-  if (!/^[a-z0-9-]+$/i.test(agentName)) {
-    throw new Error(`Invalid agent name: contains disallowed characters`);
-  }
-  try {
-    if (typeof __AGENT_PROMPTS__ !== "undefined" && __AGENT_PROMPTS__ !== null) {
-      const prompt = __AGENT_PROMPTS__[agentName];
-      if (prompt) return prompt;
-    }
-  } catch {
-  }
-  try {
-    const agentsDir = (0, import_path2.join)(getPackageDir(), "agents");
-    const agentPath = (0, import_path2.join)(agentsDir, `${agentName}.md`);
-    const resolvedPath = (0, import_path2.resolve)(agentPath);
-    const resolvedAgentsDir = (0, import_path2.resolve)(agentsDir);
-    const rel = (0, import_path2.relative)(resolvedAgentsDir, resolvedPath);
-    if (rel.startsWith("..") || (0, import_path2.isAbsolute)(rel)) {
-      throw new Error(`Invalid agent name: path traversal detected`);
-    }
-    const content = (0, import_fs.readFileSync)(agentPath, "utf-8");
-    return stripFrontmatter(content);
-  } catch (error) {
-    const message = error instanceof Error && error.message.includes("Invalid agent name") ? error.message : "Agent prompt file not found";
-    console.warn(`[loadAgentPrompt] ${message}`);
-    return `Agent: ${agentName}
-
-Prompt unavailable.`;
-  }
-}
-
-// src/config/loader.ts
-var import_fs3 = require("fs");
-var import_path5 = require("path");
-
-// src/utils/paths.ts
-var import_path4 = require("path");
-var import_fs2 = require("fs");
-var import_os2 = require("os");
-
-// src/utils/config-dir.ts
-var import_path3 = require("path");
-var import_os = require("os");
-function stripTrailingSep(p) {
-  if (!p.endsWith(import_path3.sep)) {
-    return p;
-  }
-  return p === (0, import_path3.parse)(p).root ? p : p.slice(0, -1);
-}
-function getClaudeConfigDir() {
-  const home = (0, import_os.homedir)();
-  const configured = process.env.CLAUDE_CONFIG_DIR?.trim();
-  if (!configured) {
-    return stripTrailingSep((0, import_path3.normalize)((0, import_path3.join)(home, ".claude")));
-  }
-  if (configured === "~") {
-    return stripTrailingSep((0, import_path3.normalize)(home));
-  }
-  if (configured.startsWith("~/") || configured.startsWith("~\\")) {
-    return stripTrailingSep((0, import_path3.normalize)((0, import_path3.join)(home, configured.slice(2))));
-  }
-  return stripTrailingSep((0, import_path3.normalize)(configured));
-}
-
-// src/utils/paths.ts
-function getConfigDir() {
-  if (process.platform === "win32") {
-    return process.env.APPDATA || (0, import_path4.join)((0, import_os2.homedir)(), "AppData", "Roaming");
-  }
-  return process.env.XDG_CONFIG_HOME || (0, import_path4.join)((0, import_os2.homedir)(), ".config");
-}
-var STALE_THRESHOLD_MS = 24 * 60 * 60 * 1e3;
-
-// src/utils/jsonc.ts
-function parseJsonc(content) {
-  const cleaned = stripJsoncComments(content);
-  return JSON.parse(cleaned);
-}
-function stripJsoncComments(content) {
-  let result = "";
-  let i = 0;
-  while (i < content.length) {
-    if (content[i] === "/" && content[i + 1] === "/") {
-      while (i < content.length && content[i] !== "\n") {
-        i++;
-      }
-      continue;
-    }
-    if (content[i] === "/" && content[i + 1] === "*") {
-      i += 2;
-      while (i < content.length && !(content[i] === "*" && content[i + 1] === "/")) {
-        i++;
-      }
-      i += 2;
-      continue;
-    }
-    if (content[i] === '"') {
-      result += content[i];
-      i++;
-      while (i < content.length && content[i] !== '"') {
-        if (content[i] === "\\") {
-          result += content[i];
-          i++;
-          if (i < content.length) {
-            result += content[i];
-            i++;
-          }
-          continue;
-        }
-        result += content[i];
-        i++;
-      }
-      if (i < content.length) {
-        result += content[i];
-        i++;
-      }
-      continue;
-    }
-    result += content[i];
-    i++;
-  }
-  return result;
-}
-
-// src/utils/ssrf-guard.ts
-var BLOCKED_HOST_PATTERNS = [
-  // Exact matches
-  /^localhost$/i,
-  /^127\.[0-9]+\.[0-9]+\.[0-9]+$/,
-  // Loopback
-  /^10\.[0-9]+\.[0-9]+\.[0-9]+$/,
-  // Class A private
-  /^172\.(1[6-9]|2[0-9]|3[0-1])\.[0-9]+\.[0-9]+$/,
-  // Class B private
-  /^192\.168\.[0-9]+\.[0-9]+$/,
-  // Class C private
-  /^169\.254\.[0-9]+\.[0-9]+$/,
-  // Link-local
-  /^(0|22[4-9]|23[0-9])\.[0-9]+\.[0-9]+\.[0-9]+$/,
-  // Multicast, reserved
-  /^\[?::1\]?$/,
-  // IPv6 loopback
-  /^\[?fc00:/i,
-  // IPv6 unique local
-  /^\[?fe80:/i,
-  // IPv6 link-local
-  /^\[?::ffff:/i,
-  // IPv6-mapped IPv4 (all private ranges accessible via this prefix)
-  /^\[?0{0,4}:{0,2}ffff:/i
-  // IPv6-mapped IPv4 expanded forms
-];
-var ALLOWED_SCHEMES = ["https:", "http:"];
-function validateUrlForSSRF(urlString) {
-  if (!urlString || typeof urlString !== "string") {
-    return { allowed: false, reason: "URL is empty or invalid" };
-  }
-  let parsed;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    return { allowed: false, reason: "Invalid URL format" };
-  }
-  if (!ALLOWED_SCHEMES.includes(parsed.protocol)) {
-    return { allowed: false, reason: `Protocol '${parsed.protocol}' is not allowed` };
-  }
-  const hostname = parsed.hostname.toLowerCase();
-  for (const pattern of BLOCKED_HOST_PATTERNS) {
-    if (pattern.test(hostname)) {
-      return {
-        allowed: false,
-        reason: `Hostname '${hostname}' resolves to a blocked internal/private address`
-      };
-    }
-  }
-  if (/^0x[0-9a-f]+$/i.test(hostname)) {
-    return {
-      allowed: false,
-      reason: `Hostname '${hostname}' looks like a hex-encoded IP address`
-    };
-  }
-  if (/^\d+$/.test(hostname) && hostname.length > 3) {
-    return {
-      allowed: false,
-      reason: `Hostname '${hostname}' looks like a decimal-encoded IP address`
-    };
-  }
-  if (/^0\d+\./.test(hostname)) {
-    return {
-      allowed: false,
-      reason: `Hostname '${hostname}' looks like an octal-encoded IP address`
-    };
-  }
-  if (parsed.username || parsed.password) {
-    return { allowed: false, reason: "URLs with embedded credentials are not allowed" };
-  }
-  const dangerousPaths = [
-    "/metadata",
-    "/meta-data",
-    "/latest/meta-data",
-    "/computeMetadata"
-  ];
-  const pathLower = parsed.pathname.toLowerCase();
-  for (const dangerous of dangerousPaths) {
-    if (pathLower.startsWith(dangerous)) {
-      return {
-        allowed: false,
-        reason: `Path '${parsed.pathname}' is blocked (cloud metadata access)`
-      };
-    }
-  }
-  return { allowed: true };
-}
-function validateAnthropicBaseUrl(urlString) {
-  const result = validateUrlForSSRF(urlString);
-  if (!result.allowed) {
-    return result;
-  }
-  let parsed;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    return { allowed: false, reason: "Invalid URL" };
-  }
-  if (parsed.protocol === "http:") {
-    console.warn("[SSRF Guard] Warning: Using HTTP instead of HTTPS for ANTHROPIC_BASE_URL");
-  }
-  return { allowed: true };
-}
-
-// src/config/models.ts
-var TIER_ENV_KEYS = {
-  LOW: [
-    "OMC_MODEL_LOW",
-    "CLAUDE_CODE_BEDROCK_HAIKU_MODEL",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL"
-  ],
-  MEDIUM: [
-    "OMC_MODEL_MEDIUM",
-    "CLAUDE_CODE_BEDROCK_SONNET_MODEL",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL"
-  ],
-  HIGH: [
-    "OMC_MODEL_HIGH",
-    "CLAUDE_CODE_BEDROCK_OPUS_MODEL",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL"
-  ]
-};
-var CLAUDE_FAMILY_DEFAULTS = {
-  HAIKU: "claude-haiku-4-5",
-  SONNET: "claude-sonnet-4-6",
-  OPUS: "claude-opus-4-6"
-};
-var BUILTIN_TIER_MODEL_DEFAULTS = {
-  LOW: CLAUDE_FAMILY_DEFAULTS.HAIKU,
-  MEDIUM: CLAUDE_FAMILY_DEFAULTS.SONNET,
-  HIGH: CLAUDE_FAMILY_DEFAULTS.OPUS
-};
-var CLAUDE_FAMILY_HIGH_VARIANTS = {
-  HAIKU: `${CLAUDE_FAMILY_DEFAULTS.HAIKU}-high`,
-  SONNET: `${CLAUDE_FAMILY_DEFAULTS.SONNET}-high`,
-  OPUS: `${CLAUDE_FAMILY_DEFAULTS.OPUS}-high`
-};
-var BUILTIN_EXTERNAL_MODEL_DEFAULTS = {
-  codexModel: "gpt-5.3-codex",
-  geminiModel: "gemini-3.1-pro-preview"
-};
-function resolveTierModelFromEnv(tier) {
-  for (const key of TIER_ENV_KEYS[tier]) {
-    const value = process.env[key]?.trim();
-    if (value) {
-      return value;
-    }
-  }
-  return void 0;
-}
-function getDefaultModelHigh() {
-  return resolveTierModelFromEnv("HIGH") || BUILTIN_TIER_MODEL_DEFAULTS.HIGH;
-}
-function getDefaultModelMedium() {
-  return resolveTierModelFromEnv("MEDIUM") || BUILTIN_TIER_MODEL_DEFAULTS.MEDIUM;
-}
-function getDefaultModelLow() {
-  return resolveTierModelFromEnv("LOW") || BUILTIN_TIER_MODEL_DEFAULTS.LOW;
-}
-function getDefaultTierModels() {
-  return {
-    LOW: getDefaultModelLow(),
-    MEDIUM: getDefaultModelMedium(),
-    HIGH: getDefaultModelHigh()
-  };
-}
-function resolveClaudeFamily(modelId) {
-  const lower = modelId.toLowerCase();
-  if (!lower.includes("claude")) return null;
-  if (lower.includes("sonnet")) return "SONNET";
-  if (lower.includes("opus")) return "OPUS";
-  if (lower.includes("haiku")) return "HAIKU";
-  return null;
-}
-function isBedrock() {
-  if (process.env.CLAUDE_CODE_USE_BEDROCK === "1") {
-    return true;
-  }
-  const modelId = process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || "";
-  if (modelId && /^((us|eu|ap|global)\.anthropic\.|anthropic\.claude)/i.test(modelId)) {
-    return true;
-  }
-  if (modelId && /^arn:aws(-[^:]+)?:bedrock:/i.test(modelId) && /:(inference-profile|application-inference-profile)\//i.test(modelId) && modelId.toLowerCase().includes("claude")) {
-    return true;
-  }
-  return false;
-}
-function isProviderSpecificModelId(modelId) {
-  if (/^((us|eu|ap|global)\.anthropic\.|anthropic\.claude)/i.test(modelId)) {
-    return true;
-  }
-  if (/^arn:aws(-[^:]+)?:bedrock:/i.test(modelId)) {
-    return true;
-  }
-  if (modelId.toLowerCase().startsWith("vertex_ai/")) {
-    return true;
-  }
-  return false;
-}
-function isVertexAI() {
-  if (process.env.CLAUDE_CODE_USE_VERTEX === "1") {
-    return true;
-  }
-  const modelId = process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || "";
-  if (modelId && modelId.toLowerCase().startsWith("vertex_ai/")) {
-    return true;
-  }
-  return false;
-}
-function isNonClaudeProvider() {
-  if (process.env.OMC_ROUTING_FORCE_INHERIT === "true") {
-    return true;
-  }
-  if (isBedrock()) {
-    return true;
-  }
-  if (isVertexAI()) {
-    return true;
-  }
-  const modelId = process.env.CLAUDE_MODEL || process.env.ANTHROPIC_MODEL || "";
-  if (modelId && !modelId.toLowerCase().includes("claude")) {
-    return true;
-  }
-  const baseUrl = process.env.ANTHROPIC_BASE_URL || "";
-  if (baseUrl) {
-    const validation = validateAnthropicBaseUrl(baseUrl);
-    if (!validation.allowed) {
-      console.error(`[SSRF Guard] Rejecting ANTHROPIC_BASE_URL: ${validation.reason}`);
-      return true;
-    }
-    if (!baseUrl.includes("anthropic.com")) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// src/config/loader.ts
-function buildDefaultConfig() {
-  const defaultTierModels = getDefaultTierModels();
-  return {
-    agents: {
-      omc: { model: defaultTierModels.HIGH },
-      explore: { model: defaultTierModels.LOW },
-      analyst: { model: defaultTierModels.HIGH },
-      planner: { model: defaultTierModels.HIGH },
-      architect: { model: defaultTierModels.HIGH },
-      debugger: { model: defaultTierModels.MEDIUM },
-      executor: { model: defaultTierModels.MEDIUM },
-      verifier: { model: defaultTierModels.MEDIUM },
-      securityReviewer: { model: defaultTierModels.MEDIUM },
-      codeReviewer: { model: defaultTierModels.HIGH },
-      testEngineer: { model: defaultTierModels.MEDIUM },
-      designer: { model: defaultTierModels.MEDIUM },
-      writer: { model: defaultTierModels.LOW },
-      qaTester: { model: defaultTierModels.MEDIUM },
-      scientist: { model: defaultTierModels.MEDIUM },
-      tracer: { model: defaultTierModels.MEDIUM },
-      gitMaster: { model: defaultTierModels.MEDIUM },
-      codeSimplifier: { model: defaultTierModels.HIGH },
-      critic: { model: defaultTierModels.HIGH },
-      documentSpecialist: { model: defaultTierModels.MEDIUM }
-    },
-    features: {
-      parallelExecution: true,
-      lspTools: true,
-      // Real LSP integration with language servers
-      astTools: true,
-      // Real AST tools using ast-grep
-      continuationEnforcement: true,
-      autoContextInjection: true
-    },
-    mcpServers: {
-      exa: { enabled: true },
-      context7: { enabled: true }
-    },
-    permissions: {
-      allowBash: true,
-      allowEdit: true,
-      allowWrite: true,
-      maxBackgroundTasks: 5
-    },
-    magicKeywords: {
-      ultrawork: ["ultrawork", "ulw", "uw"],
-      search: ["search", "find", "locate"],
-      analyze: ["analyze", "investigate", "examine"],
-      ultrathink: ["ultrathink", "think", "reason", "ponder"]
-    },
-    // Intelligent model routing configuration
-    routing: {
-      enabled: true,
-      defaultTier: "MEDIUM",
-      forceInherit: false,
-      escalationEnabled: true,
-      maxEscalations: 2,
-      tierModels: { ...defaultTierModels },
-      agentOverrides: {
-        architect: {
-          tier: "HIGH",
-          reason: "Advisory agent requires deep reasoning"
-        },
-        planner: {
-          tier: "HIGH",
-          reason: "Strategic planning requires deep reasoning"
-        },
-        critic: {
-          tier: "HIGH",
-          reason: "Critical review requires deep reasoning"
-        },
-        analyst: {
-          tier: "HIGH",
-          reason: "Pre-planning analysis requires deep reasoning"
-        },
-        explore: { tier: "LOW", reason: "Exploration is search-focused" },
-        writer: { tier: "LOW", reason: "Documentation is straightforward" }
-      },
-      escalationKeywords: [
-        "critical",
-        "production",
-        "urgent",
-        "security",
-        "breaking",
-        "architecture",
-        "refactor",
-        "redesign",
-        "root cause"
-      ],
-      simplificationKeywords: [
-        "find",
-        "list",
-        "show",
-        "where",
-        "search",
-        "locate",
-        "grep"
-      ]
-    },
-    // External models configuration (Codex, Gemini)
-    // Static defaults only — env var overrides applied in loadEnvConfig()
-    externalModels: {
-      defaults: {
-        codexModel: BUILTIN_EXTERNAL_MODEL_DEFAULTS.codexModel,
-        geminiModel: BUILTIN_EXTERNAL_MODEL_DEFAULTS.geminiModel
-      },
-      fallbackPolicy: {
-        onModelFailure: "provider_chain",
-        allowCrossProvider: false,
-        crossProviderOrder: ["codex", "gemini"]
-      }
-    },
-    // Delegation routing configuration (opt-in feature for external model routing)
-    delegationRouting: {
-      enabled: false,
-      defaultProvider: "claude",
-      roles: {}
-    },
-    planOutput: {
-      directory: ".omc/plans",
-      filenameTemplate: "{{name}}.md"
-    },
-    teleport: {
-      symlinkNodeModules: true
-    },
-    startupCodebaseMap: {
-      enabled: true,
-      maxFiles: 200,
-      maxDepth: 4
-    },
-    taskSizeDetection: {
-      enabled: true,
-      smallWordLimit: 50,
-      largeWordLimit: 200,
-      suppressHeavyModesForSmallTasks: true
-    },
-    promptPrerequisites: {
-      enabled: true,
-      sectionNames: {
-        memory: ["M\xC9MOIRE", "MEMOIRE", "MEMORY"],
-        skills: ["SKILLS"],
-        verifyFirst: ["VERIFY-FIRST", "VERIFY FIRST", "VERIFY_FIRST"],
-        context: ["CONTEXT"]
-      },
-      blockingTools: ["Edit", "MultiEdit", "Write", "Agent", "Task"],
-      executionKeywords: ["ralph", "ultrawork", "autopilot"]
-    }
-  };
-}
-var DEFAULT_CONFIG = buildDefaultConfig();
-function getConfigPaths() {
-  const userConfigDir = getConfigDir();
-  return {
-    user: (0, import_path5.join)(userConfigDir, "claude-omc", "config.jsonc"),
-    project: (0, import_path5.join)(process.cwd(), ".claude", "omc.jsonc")
-  };
-}
-function loadJsoncFile(path4) {
-  if (!(0, import_fs3.existsSync)(path4)) {
-    return null;
-  }
-  try {
-    const content = (0, import_fs3.readFileSync)(path4, "utf-8");
-    const result = parseJsonc(content);
-    return result;
-  } catch (error) {
-    console.error(`Error loading config from ${path4}:`, error);
-    return null;
-  }
-}
-function deepMerge(target, source) {
-  const result = { ...target };
-  const mutableResult = result;
-  for (const key of Object.keys(source)) {
-    if (key === "__proto__" || key === "constructor" || key === "prototype")
-      continue;
-    const sourceValue = source[key];
-    const targetValue = mutableResult[key];
-    if (sourceValue !== void 0 && typeof sourceValue === "object" && sourceValue !== null && !Array.isArray(sourceValue) && typeof targetValue === "object" && targetValue !== null && !Array.isArray(targetValue)) {
-      mutableResult[key] = deepMerge(
-        targetValue,
-        sourceValue
-      );
-    } else if (sourceValue !== void 0) {
-      mutableResult[key] = sourceValue;
-    }
-  }
-  return result;
-}
-function loadEnvConfig() {
-  const config = {};
-  if (process.env.EXA_API_KEY) {
-    config.mcpServers = {
-      ...config.mcpServers,
-      exa: { enabled: true, apiKey: process.env.EXA_API_KEY }
-    };
-  }
-  if (process.env.OMC_PARALLEL_EXECUTION !== void 0) {
-    config.features = {
-      ...config.features,
-      parallelExecution: process.env.OMC_PARALLEL_EXECUTION === "true"
-    };
-  }
-  if (process.env.OMC_LSP_TOOLS !== void 0) {
-    config.features = {
-      ...config.features,
-      lspTools: process.env.OMC_LSP_TOOLS === "true"
-    };
-  }
-  if (process.env.OMC_MAX_BACKGROUND_TASKS) {
-    const maxTasks = parseInt(process.env.OMC_MAX_BACKGROUND_TASKS, 10);
-    if (!isNaN(maxTasks)) {
-      config.permissions = {
-        ...config.permissions,
-        maxBackgroundTasks: maxTasks
-      };
-    }
-  }
-  if (process.env.OMC_ROUTING_ENABLED !== void 0) {
-    config.routing = {
-      ...config.routing,
-      enabled: process.env.OMC_ROUTING_ENABLED === "true"
-    };
-  }
-  if (process.env.OMC_ROUTING_FORCE_INHERIT !== void 0) {
-    config.routing = {
-      ...config.routing,
-      forceInherit: process.env.OMC_ROUTING_FORCE_INHERIT === "true"
-    };
-  }
-  if (process.env.OMC_ROUTING_DEFAULT_TIER) {
-    const tier = process.env.OMC_ROUTING_DEFAULT_TIER.toUpperCase();
-    if (tier === "LOW" || tier === "MEDIUM" || tier === "HIGH") {
-      config.routing = {
-        ...config.routing,
-        defaultTier: tier
-      };
-    }
-  }
-  const aliasKeys = ["HAIKU", "SONNET", "OPUS"];
-  const modelAliases = {};
-  for (const key of aliasKeys) {
-    const envVal = process.env[`OMC_MODEL_ALIAS_${key}`];
-    if (envVal) {
-      const lower = key.toLowerCase();
-      modelAliases[lower] = envVal.toLowerCase();
-    }
-  }
-  if (Object.keys(modelAliases).length > 0) {
-    config.routing = {
-      ...config.routing,
-      modelAliases
-    };
-  }
-  if (process.env.OMC_ESCALATION_ENABLED !== void 0) {
-    config.routing = {
-      ...config.routing,
-      escalationEnabled: process.env.OMC_ESCALATION_ENABLED === "true"
-    };
-  }
-  const externalModelsDefaults = {};
-  if (process.env.OMC_EXTERNAL_MODELS_DEFAULT_PROVIDER) {
-    const provider = process.env.OMC_EXTERNAL_MODELS_DEFAULT_PROVIDER;
-    if (provider === "codex" || provider === "gemini") {
-      externalModelsDefaults.provider = provider;
-    }
-  }
-  if (process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL) {
-    externalModelsDefaults.codexModel = process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL;
-  } else if (process.env.OMC_CODEX_DEFAULT_MODEL) {
-    externalModelsDefaults.codexModel = process.env.OMC_CODEX_DEFAULT_MODEL;
-  }
-  if (process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL) {
-    externalModelsDefaults.geminiModel = process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL;
-  } else if (process.env.OMC_GEMINI_DEFAULT_MODEL) {
-    externalModelsDefaults.geminiModel = process.env.OMC_GEMINI_DEFAULT_MODEL;
-  }
-  const externalModelsFallback = {
-    onModelFailure: "provider_chain"
-  };
-  if (process.env.OMC_EXTERNAL_MODELS_FALLBACK_POLICY) {
-    const policy = process.env.OMC_EXTERNAL_MODELS_FALLBACK_POLICY;
-    if (policy === "provider_chain" || policy === "cross_provider" || policy === "claude_only") {
-      externalModelsFallback.onModelFailure = policy;
-    }
-  }
-  if (Object.keys(externalModelsDefaults).length > 0 || externalModelsFallback.onModelFailure !== "provider_chain") {
-    config.externalModels = {
-      defaults: externalModelsDefaults,
-      fallbackPolicy: externalModelsFallback
-    };
-  }
-  if (process.env.OMC_DELEGATION_ROUTING_ENABLED !== void 0) {
-    config.delegationRouting = {
-      ...config.delegationRouting,
-      enabled: process.env.OMC_DELEGATION_ROUTING_ENABLED === "true"
-    };
-  }
-  if (process.env.OMC_DELEGATION_ROUTING_DEFAULT_PROVIDER) {
-    const provider = process.env.OMC_DELEGATION_ROUTING_DEFAULT_PROVIDER;
-    if (["claude", "codex", "gemini"].includes(provider)) {
-      config.delegationRouting = {
-        ...config.delegationRouting,
-        defaultProvider: provider
-      };
-    }
-  }
-  return config;
-}
-function warnOnDeprecatedDelegationRouting(config) {
-  const deprecatedProviders = /* @__PURE__ */ new Set();
-  const defaultProvider = config.delegationRouting?.defaultProvider;
-  if (defaultProvider === "codex" || defaultProvider === "gemini") {
-    deprecatedProviders.add(defaultProvider);
-  }
-  const roles = config.delegationRouting?.roles ?? {};
-  for (const route of Object.values(roles)) {
-    const provider = route?.provider;
-    if (provider === "codex" || provider === "gemini") {
-      deprecatedProviders.add(provider);
-    }
-  }
-  if (deprecatedProviders.size === 0) {
-    return;
-  }
-  console.warn(
-    "[OMC] delegationRouting to Codex/Gemini is deprecated and falls back to Claude Task. Use /team for Codex/Gemini CLI workers instead."
-  );
-}
-function loadConfig() {
-  const paths = getConfigPaths();
-  let config = buildDefaultConfig();
-  const userConfig = loadJsoncFile(paths.user);
-  if (userConfig) {
-    config = deepMerge(config, userConfig);
-  }
-  const projectConfig = loadJsoncFile(paths.project);
-  if (projectConfig) {
-    config = deepMerge(config, projectConfig);
-  }
-  const envConfig = loadEnvConfig();
-  config = deepMerge(config, envConfig);
-  if (config.routing?.forceInherit !== true && process.env.OMC_ROUTING_FORCE_INHERIT === void 0 && isNonClaudeProvider()) {
-    config.routing = {
-      ...config.routing,
-      forceInherit: true
-    };
-  }
-  warnOnDeprecatedDelegationRouting(config);
-  return config;
-}
-
-// src/agents/architect.ts
-var ARCHITECT_PROMPT_METADATA = {
-  category: "advisor",
-  cost: "EXPENSIVE",
-  promptAlias: "architect",
-  triggers: [
-    { domain: "Architecture decisions", trigger: "Multi-system tradeoffs, unfamiliar patterns" },
-    { domain: "Self-review", trigger: "After completing significant implementation" },
-    { domain: "Hard debugging", trigger: "After 2+ failed fix attempts" }
-  ],
-  useWhen: [
-    "Complex architecture design",
-    "After completing significant work",
-    "2+ failed fix attempts",
-    "Unfamiliar code patterns",
-    "Security/performance concerns",
-    "Multi-system tradeoffs"
-  ],
-  avoidWhen: [
-    "Simple file operations (use direct tools)",
-    "First attempt at any fix (try yourself first)",
-    "Questions answerable from code you've read",
-    "Trivial decisions (variable names, formatting)",
-    "Things you can infer from existing code patterns"
-  ]
-};
-var architectAgent = {
-  name: "architect",
-  description: "Read-only consultation agent. High-IQ reasoning specialist for debugging hard problems and high-difficulty architecture design.",
-  prompt: loadAgentPrompt("architect"),
-  model: "opus",
-  defaultModel: "opus",
-  metadata: ARCHITECT_PROMPT_METADATA
-};
-
-// src/agents/designer.ts
-var FRONTEND_ENGINEER_PROMPT_METADATA = {
-  category: "specialist",
-  cost: "CHEAP",
-  promptAlias: "designer",
-  triggers: [
-    {
-      domain: "UI/UX",
-      trigger: "Visual changes, styling, components, accessibility"
-    },
-    {
-      domain: "Design",
-      trigger: "Layout, animations, responsive design"
-    }
-  ],
-  useWhen: [
-    "Visual styling or layout changes",
-    "Component design or refactoring",
-    "Animation implementation",
-    "Accessibility improvements",
-    "Responsive design work"
-  ],
-  avoidWhen: [
-    "Pure logic changes in frontend files",
-    "Backend/API work",
-    "Non-visual refactoring"
-  ]
-};
-var designerAgent = {
-  name: "designer",
-  description: `Designer-turned-developer who crafts stunning UI/UX even without design mockups. Use for VISUAL changes only (styling, layout, animation). Pure logic changes in frontend files should be handled directly.`,
-  prompt: loadAgentPrompt("designer"),
-  model: "sonnet",
-  defaultModel: "sonnet",
-  metadata: FRONTEND_ENGINEER_PROMPT_METADATA
-};
-
-// src/agents/writer.ts
-var DOCUMENT_WRITER_PROMPT_METADATA = {
-  category: "specialist",
-  cost: "FREE",
-  promptAlias: "writer",
-  triggers: [
-    {
-      domain: "Documentation",
-      trigger: "README, API docs, guides, comments"
-    }
-  ],
-  useWhen: [
-    "Creating or updating README files",
-    "Writing API documentation",
-    "Creating user guides or tutorials",
-    "Adding code comments or JSDoc",
-    "Architecture documentation"
-  ],
-  avoidWhen: [
-    "Code implementation tasks",
-    "Bug fixes",
-    "Non-documentation tasks"
-  ]
-};
-var writerAgent = {
-  name: "writer",
-  description: `Technical writer who crafts clear, comprehensive documentation. Specializes in README files, API docs, architecture docs, and user guides.`,
-  prompt: loadAgentPrompt("writer"),
-  model: "haiku",
-  defaultModel: "haiku",
-  metadata: DOCUMENT_WRITER_PROMPT_METADATA
-};
-
-// src/agents/critic.ts
-var CRITIC_PROMPT_METADATA = {
-  category: "reviewer",
-  cost: "EXPENSIVE",
-  promptAlias: "critic",
-  triggers: [
-    {
-      domain: "Plan Review",
-      trigger: "Evaluating work plans before execution"
-    }
-  ],
-  useWhen: [
-    "After planner creates a work plan",
-    "Before executing a complex plan",
-    "When plan quality validation is needed",
-    "To catch gaps before implementation"
-  ],
-  avoidWhen: [
-    "Simple, straightforward tasks",
-    "When no plan exists to review",
-    "During implementation phase"
-  ]
-};
-var criticAgent = {
-  name: "critic",
-  description: `Expert reviewer for evaluating work plans against rigorous clarity, verifiability, and completeness standards. Use after planner creates a work plan to validate it before execution.`,
-  prompt: loadAgentPrompt("critic"),
-  model: "opus",
-  defaultModel: "opus",
-  metadata: CRITIC_PROMPT_METADATA
-};
-
-// src/agents/analyst.ts
-var ANALYST_PROMPT_METADATA = {
-  category: "planner",
-  cost: "EXPENSIVE",
-  promptAlias: "analyst",
-  triggers: [
-    {
-      domain: "Pre-Planning",
-      trigger: "Hidden requirements, edge cases, risk analysis"
-    }
-  ],
-  useWhen: [
-    "Before creating a work plan",
-    "When requirements seem incomplete",
-    "To identify hidden assumptions",
-    "Risk analysis before implementation",
-    "Scope validation"
-  ],
-  avoidWhen: [
-    "Simple, well-defined tasks",
-    "During implementation phase",
-    "When plan already reviewed"
-  ]
-};
-var analystAgent = {
-  name: "analyst",
-  description: `Pre-planning consultant that analyzes requests before implementation to identify hidden requirements, edge cases, and potential risks. Use before creating a work plan.`,
-  prompt: loadAgentPrompt("analyst"),
-  model: "opus",
-  defaultModel: "opus",
-  metadata: ANALYST_PROMPT_METADATA
-};
-
-// src/agents/executor.ts
-var EXECUTOR_PROMPT_METADATA = {
-  category: "specialist",
-  cost: "CHEAP",
-  promptAlias: "Junior",
-  triggers: [
-    { domain: "Direct implementation", trigger: "Single-file changes, focused tasks" },
-    { domain: "Bug fixes", trigger: "Clear, scoped fixes" },
-    { domain: "Small features", trigger: "Well-defined, isolated work" }
-  ],
-  useWhen: [
-    "Direct, focused implementation tasks",
-    "Single-file or few-file changes",
-    "When delegation overhead isn't worth it",
-    "Clear, well-scoped work items"
-  ],
-  avoidWhen: [
-    "Multi-file refactoring (use orchestrator)",
-    "Tasks requiring research (use explore/document-specialist first)",
-    "Complex decisions (consult architect)"
-  ]
-};
-var executorAgent = {
-  name: "executor",
-  description: "Focused task executor. Execute tasks directly. NEVER delegate or spawn other agents. Same discipline as OMC, no delegation.",
-  prompt: loadAgentPrompt("executor"),
-  model: "sonnet",
-  defaultModel: "sonnet",
-  metadata: EXECUTOR_PROMPT_METADATA
-};
-
-// src/agents/planner.ts
-var PLANNER_PROMPT_METADATA = {
-  category: "planner",
-  cost: "EXPENSIVE",
-  promptAlias: "planner",
-  triggers: [
-    {
-      domain: "Strategic Planning",
-      trigger: "Comprehensive work plans, interview-style consultation"
-    }
-  ],
-  useWhen: [
-    "Complex features requiring planning",
-    "When requirements need clarification through interview",
-    "Creating comprehensive work plans",
-    "Before large implementation efforts"
-  ],
-  avoidWhen: [
-    "Simple, straightforward tasks",
-    "When implementation should just start",
-    "When a plan already exists"
-  ]
-};
-var plannerAgent = {
-  name: "planner",
-  description: `Strategic planning consultant. Interviews users to understand requirements, then creates comprehensive work plans. NEVER implements - only plans.`,
-  prompt: loadAgentPrompt("planner"),
-  model: "opus",
-  defaultModel: "opus",
-  metadata: PLANNER_PROMPT_METADATA
-};
-
-// src/agents/qa-tester.ts
-var QA_TESTER_PROMPT_METADATA = {
-  category: "specialist",
-  cost: "CHEAP",
-  promptAlias: "QATester",
-  triggers: [
-    { domain: "CLI testing", trigger: "Testing command-line applications" },
-    { domain: "Service testing", trigger: "Starting and testing background services" },
-    { domain: "Integration testing", trigger: "End-to-end CLI workflow verification" },
-    { domain: "Interactive testing", trigger: "Testing applications requiring user input" }
-  ],
-  useWhen: [
-    "Testing CLI applications that need interactive input",
-    "Starting background services and verifying their behavior",
-    "Running end-to-end tests on command-line tools",
-    "Testing applications that produce streaming output",
-    "Verifying service startup and shutdown behavior"
-  ],
-  avoidWhen: [
-    "Unit testing (use standard test runners)",
-    "API testing without CLI interface (use curl/httpie directly)",
-    "Static code analysis (use architect or explore)"
-  ]
-};
-var qaTesterAgent = {
-  name: "qa-tester",
-  description: "Interactive CLI testing specialist using tmux. Tests CLI applications, background services, and interactive tools. Manages test sessions, sends commands, verifies output, and ensures cleanup.",
-  prompt: loadAgentPrompt("qa-tester"),
-  model: "sonnet",
-  defaultModel: "sonnet",
-  metadata: QA_TESTER_PROMPT_METADATA
-};
-
-// src/agents/scientist.ts
-var SCIENTIST_PROMPT_METADATA = {
-  category: "specialist",
-  cost: "CHEAP",
-  promptAlias: "scientist",
-  triggers: [
-    { domain: "Data analysis", trigger: "Analyzing datasets and computing statistics" },
-    { domain: "Research execution", trigger: "Running data experiments and generating findings" },
-    { domain: "Python data work", trigger: "Using pandas, numpy, scipy for data tasks" },
-    { domain: "EDA", trigger: "Exploratory data analysis on files" },
-    { domain: "Hypothesis testing", trigger: "Statistical tests with confidence intervals and effect sizes" },
-    { domain: "Research stages", trigger: "Multi-stage analysis with structured markers" }
-  ],
-  useWhen: [
-    "Analyzing CSV, JSON, Parquet, or other data files",
-    "Computing descriptive statistics or aggregations",
-    "Performing exploratory data analysis (EDA)",
-    "Generating data-driven findings and insights",
-    "Simple ML tasks like clustering or regression",
-    "Data transformations and feature engineering",
-    "Generating data analysis reports with visualizations",
-    "Hypothesis testing with statistical evidence markers",
-    "Research stages with [STAGE:*] markers for orchestration"
-  ],
-  avoidWhen: [
-    "Researching external documentation or APIs (use document-specialist)",
-    "Implementing production code features (use executor)",
-    "Architecture or system design questions (use architect)",
-    "No data files to analyze - just theoretical questions",
-    "Web scraping or external data fetching (use document-specialist)"
-  ]
-};
-var scientistAgent = {
-  name: "scientist",
-  description: "Data analysis and research execution specialist. Executes Python code for EDA, statistical analysis, and generating data-driven findings. Works with CSV, JSON, Parquet files using pandas, numpy, scipy.",
-  prompt: loadAgentPrompt("scientist"),
-  model: "sonnet",
-  defaultModel: "sonnet",
-  metadata: SCIENTIST_PROMPT_METADATA
-};
-
-// src/agents/explore.ts
-var EXPLORE_PROMPT_METADATA = {
-  category: "exploration",
-  cost: "CHEAP",
-  promptAlias: "Explore",
-  triggers: [
-    { domain: "Internal codebase search", trigger: "Finding implementations, patterns, files" },
-    { domain: "Project structure", trigger: "Understanding code organization" },
-    { domain: "Code discovery", trigger: "Locating specific code by pattern" }
-  ],
-  useWhen: [
-    "Finding files by pattern or name",
-    "Searching for implementations in current project",
-    "Understanding project structure",
-    "Locating code by content or pattern",
-    "Quick codebase exploration"
-  ],
-  avoidWhen: [
-    "External documentation, literature, or academic paper lookup (use document-specialist)",
-    "Database/reference/manual lookups outside the current project (use document-specialist)",
-    "GitHub/npm package research (use document-specialist)",
-    "Complex architectural analysis (use architect)",
-    "When you already know the file location"
-  ]
-};
-var exploreAgent = {
-  name: "explore",
-  description: "Fast codebase exploration and pattern search. Use for finding files, understanding structure, locating implementations. Searches INTERNAL codebase only; external docs, literature, papers, and reference databases belong to document-specialist.",
-  prompt: loadAgentPrompt("explore"),
-  model: "haiku",
-  defaultModel: "haiku",
-  metadata: EXPLORE_PROMPT_METADATA
-};
-
-// src/agents/tracer.ts
-var TRACER_PROMPT_METADATA = {
-  category: "advisor",
-  cost: "EXPENSIVE",
-  promptAlias: "tracer",
-  triggers: [
-    { domain: "Causal tracing", trigger: "Why did this happen? Which explanation best fits the evidence?" },
-    { domain: "Forensic analysis", trigger: "Observed output, artifact, or behavior needs ranked explanations" },
-    { domain: "Evidence-driven uncertainty reduction", trigger: "Need competing hypotheses and the next best probe" }
-  ],
-  useWhen: [
-    "Tracing ambiguous runtime behavior, regressions, or orchestration outcomes",
-    "Ranking competing explanations for an observed result",
-    "Separating observation, evidence, and inference",
-    "Explaining performance, architecture, scientific, or configuration outcomes",
-    "Identifying the next probe that would collapse uncertainty fastest"
-  ],
-  avoidWhen: [
-    "The task is pure implementation or fixing (use executor/debugger)",
-    "The task is a generic summary without causal analysis",
-    "A single-file code search is enough (use explore)",
-    "You already have decisive evidence and only need execution"
-  ]
-};
-var tracerAgent = {
-  name: "tracer",
-  description: "Evidence-driven causal tracing specialist. Explains observed outcomes using competing hypotheses, evidence for and against, uncertainty tracking, and next-probe recommendations.",
-  prompt: loadAgentPrompt("tracer"),
-  model: "sonnet",
-  defaultModel: "sonnet",
-  metadata: TRACER_PROMPT_METADATA
-};
-
-// src/agents/document-specialist.ts
-var DOCUMENT_SPECIALIST_PROMPT_METADATA = {
-  category: "exploration",
-  cost: "CHEAP",
-  promptAlias: "document-specialist",
-  triggers: [
-    {
-      domain: "Project documentation",
-      trigger: "README, docs/, migration guides, local references"
-    },
-    {
-      domain: "External documentation",
-      trigger: "API references, official docs"
-    },
-    {
-      domain: "API/framework correctness",
-      trigger: "Context Hub / chub first when available; curated backend fallback otherwise"
-    },
-    {
-      domain: "OSS implementations",
-      trigger: "GitHub examples, package source"
-    },
-    {
-      domain: "Best practices",
-      trigger: "Community patterns, recommendations"
-    },
-    {
-      domain: "Literature and reference research",
-      trigger: "Academic papers, manuals, reference databases"
-    }
-  ],
-  useWhen: [
-    "Checking README/docs/local reference files before broader research",
-    "Looking up official documentation",
-    "Using Context Hub / chub (or another curated docs backend) for external API/framework correctness when available",
-    "Finding GitHub examples",
-    "Researching npm/pip packages",
-    "Stack Overflow solutions",
-    "External API references",
-    "Searching external literature or academic papers",
-    "Looking up manuals, databases, or reference material outside the current project"
-  ],
-  avoidWhen: [
-    "Internal codebase implementation search (use explore)",
-    "Current project source files when the task is code discovery rather than documentation lookup (use explore)",
-    "When you already have the information"
-  ]
-};
-var documentSpecialistAgent = {
-  name: "document-specialist",
-  description: "Document Specialist for documentation research and reference finding. Use for local repo docs, official docs, Context Hub / chub or other curated docs backends for API/framework correctness, GitHub examples, OSS implementations, external literature, academic papers, and reference/database lookups. Avoid internal implementation search; use explore for code discovery.",
-  prompt: loadAgentPrompt("document-specialist"),
-  model: "sonnet",
-  defaultModel: "sonnet",
-  metadata: DOCUMENT_SPECIALIST_PROMPT_METADATA
-};
-
-// src/agents/definitions.ts
-var debuggerAgent = {
-  name: "debugger",
-  description: "Root-cause analysis, regression isolation, failure diagnosis (Sonnet).",
-  prompt: loadAgentPrompt("debugger"),
-  model: "sonnet",
-  defaultModel: "sonnet"
-};
-var verifierAgent = {
-  name: "verifier",
-  description: "Completion evidence, claim validation, test adequacy (Sonnet).",
-  prompt: loadAgentPrompt("verifier"),
-  model: "sonnet",
-  defaultModel: "sonnet"
-};
-var testEngineerAgent = {
-  name: "test-engineer",
-  description: "Test strategy, coverage, flaky test hardening (Sonnet).",
-  prompt: loadAgentPrompt("test-engineer"),
-  model: "sonnet",
-  defaultModel: "sonnet"
-};
-var securityReviewerAgent = {
-  name: "security-reviewer",
-  description: "Security vulnerability detection specialist (Sonnet). Use for security audits and OWASP detection.",
-  prompt: loadAgentPrompt("security-reviewer"),
-  model: "sonnet",
-  defaultModel: "sonnet"
-};
-var codeReviewerAgent = {
-  name: "code-reviewer",
-  description: "Expert code review specialist (Opus). Use for comprehensive code quality review.",
-  prompt: loadAgentPrompt("code-reviewer"),
-  model: "opus",
-  defaultModel: "opus"
-};
-var gitMasterAgent = {
-  name: "git-master",
-  description: "Git expert for atomic commits, rebasing, and history management with style detection",
-  prompt: loadAgentPrompt("git-master"),
-  model: "sonnet",
-  defaultModel: "sonnet"
-};
-var codeSimplifierAgent = {
-  name: "code-simplifier",
-  description: "Simplifies and refines code for clarity, consistency, and maintainability (Opus).",
-  prompt: loadAgentPrompt("code-simplifier"),
-  model: "opus",
-  defaultModel: "opus"
-};
-
-// src/features/delegation-enforcer.ts
-var FAMILY_TO_ALIAS = {
-  SONNET: "sonnet",
-  OPUS: "opus",
-  HAIKU: "haiku"
-};
-function normalizeToCcAlias(model) {
-  const family = resolveClaudeFamily(model);
-  return family ? FAMILY_TO_ALIAS[family] ?? model : model;
-}
-
-// src/lib/security-config.ts
-var import_fs4 = require("fs");
-var import_path6 = require("path");
-var DEFAULTS = {
-  restrictToolPaths: false,
-  pythonSandbox: false,
-  disableProjectSkills: false,
-  disableAutoUpdate: false,
-  hardMaxIterations: 500,
-  disableRemoteMcp: false,
-  disableExternalLLM: false
-};
-var STRICT_OVERRIDES = {
-  restrictToolPaths: true,
-  pythonSandbox: true,
-  disableProjectSkills: true,
-  disableAutoUpdate: true,
-  hardMaxIterations: 200,
-  disableRemoteMcp: true,
-  disableExternalLLM: true
-};
-var cachedConfig = null;
-function loadSecurityFromConfigFiles() {
-  const paths = [
-    (0, import_path6.join)(process.cwd(), ".claude", "omc.jsonc"),
-    (0, import_path6.join)(getConfigDir(), "claude-omc", "config.jsonc")
-  ];
-  for (const configPath of paths) {
-    if (!(0, import_fs4.existsSync)(configPath)) continue;
-    try {
-      const content = (0, import_fs4.readFileSync)(configPath, "utf-8");
-      const parsed = parseJsonc(content);
-      if (parsed?.security && typeof parsed.security === "object") {
-        return parsed.security;
-      }
-    } catch {
-    }
-  }
-  return {};
-}
-function getSecurityConfig() {
-  if (cachedConfig) return cachedConfig;
-  const isStrict = process.env.OMC_SECURITY === "strict";
-  const base = isStrict ? { ...STRICT_OVERRIDES } : { ...DEFAULTS };
-  const fileOverrides = loadSecurityFromConfigFiles();
-  if (isStrict) {
-    cachedConfig = {
-      restrictToolPaths: base.restrictToolPaths || (fileOverrides.restrictToolPaths ?? false),
-      pythonSandbox: base.pythonSandbox || (fileOverrides.pythonSandbox ?? false),
-      disableProjectSkills: base.disableProjectSkills || (fileOverrides.disableProjectSkills ?? false),
-      disableAutoUpdate: base.disableAutoUpdate || (fileOverrides.disableAutoUpdate ?? false),
-      disableRemoteMcp: base.disableRemoteMcp || (fileOverrides.disableRemoteMcp ?? false),
-      disableExternalLLM: base.disableExternalLLM || (fileOverrides.disableExternalLLM ?? false),
-      hardMaxIterations: Math.min(base.hardMaxIterations, typeof fileOverrides.hardMaxIterations === "number" && fileOverrides.hardMaxIterations > 0 ? fileOverrides.hardMaxIterations : base.hardMaxIterations)
-    };
-  } else {
-    cachedConfig = {
-      restrictToolPaths: fileOverrides.restrictToolPaths ?? base.restrictToolPaths,
-      pythonSandbox: fileOverrides.pythonSandbox ?? base.pythonSandbox,
-      disableProjectSkills: fileOverrides.disableProjectSkills ?? base.disableProjectSkills,
-      disableAutoUpdate: fileOverrides.disableAutoUpdate ?? base.disableAutoUpdate,
-      disableRemoteMcp: fileOverrides.disableRemoteMcp ?? base.disableRemoteMcp,
-      disableExternalLLM: fileOverrides.disableExternalLLM ?? base.disableExternalLLM,
-      hardMaxIterations: fileOverrides.hardMaxIterations ?? base.hardMaxIterations
-    };
-  }
-  return cachedConfig;
-}
-function isExternalLLMDisabled() {
-  return getSecurityConfig().disableExternalLLM;
-}
-
-// src/team/model-contract.ts
-var resolvedPathCache = /* @__PURE__ */ new Map();
-var UNTRUSTED_PATH_PATTERNS = [
-  /^\/tmp(\/|$)/,
-  /^\/var\/tmp(\/|$)/,
-  /^\/dev\/shm(\/|$)/
-];
-function getTrustedPrefixes() {
-  const trusted = [
-    "/usr/local/bin",
-    "/usr/bin",
-    "/opt/homebrew/"
-  ];
-  const home = process.env.HOME;
-  if (home) {
-    trusted.push(`${home}/.local/bin`);
-    trusted.push(`${home}/.nvm/`);
-    trusted.push(`${home}/.cargo/bin`);
-  }
-  const custom = (process.env.OMC_TRUSTED_CLI_DIRS ?? "").split(":").map((part) => part.trim()).filter(Boolean).filter((part) => (0, import_path7.isAbsolute)(part));
-  trusted.push(...custom);
-  return trusted;
-}
-function isTrustedPrefix(resolvedPath) {
-  const normalized = (0, import_path7.normalize)(resolvedPath);
-  return getTrustedPrefixes().some((prefix) => normalized.startsWith((0, import_path7.normalize)(prefix)));
-}
-function assertBinaryName(binary) {
-  if (!/^[A-Za-z0-9._-]+$/.test(binary)) {
-    throw new Error(`Invalid CLI binary name: ${binary}`);
-  }
-}
-function resolveCliBinaryPath(binary) {
-  assertBinaryName(binary);
-  const cached = resolvedPathCache.get(binary);
-  if (cached) return cached;
-  const finder = process.platform === "win32" ? "where" : "which";
-  const result = (0, import_child_process2.spawnSync)(finder, [binary], {
-    timeout: 5e3,
-    env: process.env
-  });
-  if (result.status !== 0) {
-    throw new Error(`CLI binary '${binary}' not found in PATH`);
-  }
-  const stdout = result.stdout?.toString().trim() ?? "";
-  const firstLine = stdout.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
-  if (!firstLine) {
-    throw new Error(`CLI binary '${binary}' not found in PATH`);
-  }
-  const resolvedPath = (0, import_path7.normalize)(firstLine);
-  if (!(0, import_path7.isAbsolute)(resolvedPath)) {
-    throw new Error(`Resolved CLI binary '${binary}' to relative path`);
-  }
-  if (UNTRUSTED_PATH_PATTERNS.some((pattern) => pattern.test(resolvedPath))) {
-    throw new Error(`Resolved CLI binary '${binary}' to untrusted location: ${resolvedPath}`);
-  }
-  if (!isTrustedPrefix(resolvedPath)) {
-    console.warn(`[omc:cli-security] CLI binary '${binary}' resolved to non-standard path: ${resolvedPath}`);
-  }
-  resolvedPathCache.set(binary, resolvedPath);
-  return resolvedPath;
-}
-var CONTRACTS = {
-  claude: {
-    agentType: "claude",
-    binary: "claude",
-    installInstructions: "Install Claude CLI: https://claude.ai/download",
-    buildLaunchArgs(model, extraFlags = []) {
-      const args = ["--dangerously-skip-permissions"];
-      if (model) {
-        const resolved = isProviderSpecificModelId(model) ? model : normalizeToCcAlias(model);
-        args.push("--model", resolved);
-      }
-      return [...args, ...extraFlags];
-    },
-    parseOutput(rawOutput) {
-      return rawOutput.trim();
-    }
-  },
-  codex: {
-    agentType: "codex",
-    binary: "codex",
-    installInstructions: "Install Codex CLI: npm install -g @openai/codex",
-    supportsPromptMode: true,
-    // Codex accepts prompt as a positional argument (no flag needed):
-    //   codex [OPTIONS] [PROMPT]
-    buildLaunchArgs(model, extraFlags = []) {
-      const args = ["--dangerously-bypass-approvals-and-sandbox"];
-      if (model) args.push("--model", model);
-      return [...args, ...extraFlags];
-    },
-    parseOutput(rawOutput) {
-      const lines = rawOutput.trim().split("\n").filter(Boolean);
-      for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-          const parsed = JSON.parse(lines[i]);
-          if (parsed.type === "message" && parsed.role === "assistant") {
-            return parsed.content ?? rawOutput;
-          }
-          if (parsed.type === "result" || parsed.output) {
-            return parsed.output ?? parsed.result ?? rawOutput;
-          }
-        } catch {
-        }
-      }
-      return rawOutput.trim();
-    }
-  },
-  gemini: {
-    agentType: "gemini",
-    binary: "gemini",
-    installInstructions: "Install Gemini CLI: npm install -g @google/gemini-cli",
-    supportsPromptMode: true,
-    promptModeFlag: "-i",
-    buildLaunchArgs(model, extraFlags = []) {
-      const args = ["--approval-mode", "yolo"];
-      if (model) args.push("--model", model);
-      return [...args, ...extraFlags];
-    },
-    parseOutput(rawOutput) {
-      return rawOutput.trim();
-    }
-  }
-};
-function getContract(agentType) {
-  const contract = CONTRACTS[agentType];
-  if (!contract) {
-    throw new Error(`Unknown agent type: ${agentType}. Supported: ${Object.keys(CONTRACTS).join(", ")}`);
-  }
-  if (agentType !== "claude" && isExternalLLMDisabled()) {
-    throw new Error(
-      `External LLM provider "${agentType}" is blocked by security policy (disableExternalLLM). Only Claude workers are allowed in the current security configuration.`
-    );
-  }
-  return contract;
-}
-function validateBinaryRef(binary) {
-  if ((0, import_path7.isAbsolute)(binary)) return;
-  if (/^[A-Za-z0-9._-]+$/.test(binary)) return;
-  throw new Error(`Unsafe CLI binary reference: ${binary}`);
-}
-function resolveBinaryPath(binary) {
-  validateBinaryRef(binary);
-  if ((0, import_path7.isAbsolute)(binary)) return binary;
-  try {
-    const resolver = process.platform === "win32" ? "where" : "which";
-    const result = (0, import_child_process2.spawnSync)(resolver, [binary], { timeout: 5e3, encoding: "utf8" });
-    if (result.status !== 0) return binary;
-    const lines = result.stdout?.split(/\r?\n/).map((line) => line.trim()).filter(Boolean) ?? [];
-    const firstPath = lines[0];
-    const isResolvedAbsolute = !!firstPath && ((0, import_path7.isAbsolute)(firstPath) || import_path7.win32.isAbsolute(firstPath));
-    return isResolvedAbsolute ? firstPath : binary;
-  } catch {
-    return binary;
-  }
-}
-function resolveValidatedBinaryPath(agentType) {
-  const contract = getContract(agentType);
-  return resolveCliBinaryPath(contract.binary);
-}
-function buildLaunchArgs(agentType, config) {
-  return getContract(agentType).buildLaunchArgs(config.model, config.extraFlags);
-}
-function buildWorkerArgv(agentType, config) {
-  validateTeamName(config.teamName);
-  const contract = getContract(agentType);
-  const binary = config.resolvedBinaryPath ? (() => {
-    validateBinaryRef(config.resolvedBinaryPath);
-    return config.resolvedBinaryPath;
-  })() : resolveBinaryPath(contract.binary);
-  const args = buildLaunchArgs(agentType, config);
-  return [binary, ...args];
-}
-var WORKER_MODEL_ENV_ALLOWLIST = [
-  "ANTHROPIC_MODEL",
-  "CLAUDE_MODEL",
-  "ANTHROPIC_BASE_URL",
-  "CLAUDE_CODE_USE_BEDROCK",
-  "CLAUDE_CODE_USE_VERTEX",
-  "CLAUDE_CODE_BEDROCK_OPUS_MODEL",
-  "CLAUDE_CODE_BEDROCK_SONNET_MODEL",
-  "CLAUDE_CODE_BEDROCK_HAIKU_MODEL",
-  "ANTHROPIC_DEFAULT_OPUS_MODEL",
-  "ANTHROPIC_DEFAULT_SONNET_MODEL",
-  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-  "OMC_MODEL_HIGH",
-  "OMC_MODEL_MEDIUM",
-  "OMC_MODEL_LOW",
-  "OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL",
-  "OMC_CODEX_DEFAULT_MODEL",
-  "OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL",
-  "OMC_GEMINI_DEFAULT_MODEL"
-];
-function getWorkerEnv(teamName, workerName2, agentType, env = process.env) {
-  validateTeamName(teamName);
-  const workerEnv = {
-    OMC_TEAM_WORKER: `${teamName}/${workerName2}`,
-    OMC_TEAM_NAME: teamName,
-    OMC_WORKER_AGENT_TYPE: agentType
-  };
-  for (const key of WORKER_MODEL_ENV_ALLOWLIST) {
-    const value = env[key];
-    if (typeof value === "string" && value.length > 0) {
-      workerEnv[key] = value;
-    }
-  }
-  return workerEnv;
-}
-function isPromptModeAgent(agentType) {
-  const contract = getContract(agentType);
-  return !!contract.supportsPromptMode;
-}
-function resolveClaudeWorkerModel(env = process.env) {
-  if (env.OMC_ROUTING_FORCE_INHERIT === "true") {
-    return void 0;
-  }
-  if (!isBedrock() && !isVertexAI()) {
-    return void 0;
-  }
-  const directModel = env.ANTHROPIC_MODEL || env.CLAUDE_MODEL || "";
-  if (directModel) {
-    return directModel;
-  }
-  const bedrockModel = env.CLAUDE_CODE_BEDROCK_SONNET_MODEL || env.ANTHROPIC_DEFAULT_SONNET_MODEL || "";
-  if (bedrockModel) {
-    return bedrockModel;
-  }
-  const omcModel = env.OMC_MODEL_MEDIUM || "";
-  if (omcModel) {
-    return omcModel;
-  }
-  return void 0;
-}
-function getPromptModeArgs(agentType, instruction) {
-  const contract = getContract(agentType);
-  if (!contract.supportsPromptMode) {
-    return [];
-  }
-  if (contract.promptModeFlag) {
-    return [contract.promptModeFlag, instruction];
-  }
-  return [instruction];
-}
-
-// src/team/runtime.ts
+init_model_contract();
 init_team_name();
 init_tmux_session();
 
@@ -2670,7 +2973,9 @@ var import_path10 = require("path");
 var import_fs6 = require("fs");
 var import_path9 = require("path");
 var import_url2 = require("url");
-var import_meta2 = {};
+init_utils();
+init_skininthegamebros_guidance();
+var import_meta3 = {};
 function getPackageDir2() {
   if (typeof __dirname !== "undefined" && __dirname) {
     const currentDirName = (0, import_path9.basename)(__dirname);
@@ -2683,7 +2988,7 @@ function getPackageDir2() {
     }
   }
   try {
-    const __filename = (0, import_url2.fileURLToPath)(import_meta2.url);
+    const __filename = (0, import_url2.fileURLToPath)(import_meta3.url);
     const __dirname2 = (0, import_path9.dirname)(__filename);
     const currentDirName = (0, import_path9.basename)(__dirname2);
     if (currentDirName === "bridge") {
@@ -2762,6 +3067,7 @@ function formatOmcCliInvocation(commandSuffix, options = {}) {
 }
 
 // src/team/worker-bootstrap.ts
+init_model_contract();
 function buildInstructionPath(...parts) {
   return (0, import_path10.join)(...parts).replaceAll("\\", "/");
 }
@@ -2780,6 +3086,14 @@ function agentTypeGuidance(agentType) {
   const teamApiCommand = formatOmcCliInvocation("team api");
   const claimTaskCommand = formatOmcCliInvocation("team api claim-task");
   const transitionTaskStatusCommand = formatOmcCliInvocation("team api transition-task-status");
+  try {
+    const { getContract: getContract2 } = (init_model_contract(), __toCommonJS(model_contract_exports));
+    const contract = getContract2(agentType);
+    if (contract.hints?.workerGuidanceOverride) {
+      return contract.hints.workerGuidanceOverride;
+    }
+  } catch {
+  }
   switch (agentType) {
     case "codex":
       return [
@@ -2798,7 +3112,7 @@ function agentTypeGuidance(agentType) {
     case "claude":
     default:
       return [
-        "### Agent-Type Guidance (claude)",
+        `### Agent-Type Guidance (${agentType})`,
         "- Keep reasoning focused on assigned task IDs and send concise progress acks to leader-fixed.",
         "- Before any risky command, send a blocker/proposal message to leader-fixed and wait for updated inbox instructions."
       ].join("\n");
@@ -3055,6 +3369,7 @@ function cleanupTeamWorktrees(teamName, repoRoot) {
 // src/team/task-file-ops.ts
 var import_fs10 = require("fs");
 var import_path13 = require("path");
+init_config_dir();
 init_tmux_session();
 init_platform();
 
@@ -3700,12 +4015,11 @@ async function spawnWorkerForTask(runtime, workerNameValue, taskIndex) {
     runtime.resolvedBinaryPaths = {};
   }
   runtime.resolvedBinaryPaths[agentType] = resolvedBinaryPath;
+  const agentContract = getContract(agentType);
   const modelForAgent = (() => {
-    if (agentType === "codex") {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL || process.env.OMC_CODEX_DEFAULT_MODEL || void 0;
-    }
-    if (agentType === "gemini") {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL || process.env.OMC_GEMINI_DEFAULT_MODEL || void 0;
+    if (agentContract.hints?.modelEnvPrefix) {
+      const envFallback = `OMC_EXTERNAL_MODELS_DEFAULT_${agentContract.hints.modelEnvPrefix.replace("OMC_", "")}_MODEL`;
+      return process.env[envFallback] || process.env[`${agentContract.hints.modelEnvPrefix}_DEFAULT_MODEL`] || void 0;
     }
     return resolveClaudeWorkerModel();
   })();
@@ -3743,7 +4057,7 @@ async function spawnWorkerForTask(runtime, workerNameValue, taskIndex) {
       await resetTaskToPending(root, taskId, runtime.teamName, runtime.cwd);
       throw new Error(`worker_pane_not_ready:${workerNameValue}`);
     }
-    if (agentType === "gemini") {
+    if (agentContract.hints?.needsTrustConfirm) {
       const confirmed = await notifyPaneWithRetry(runtime.sessionName, paneId, "1");
       if (!confirmed) {
         await killWorkerPane(runtime, workerNameValue, paneId);
@@ -4078,6 +4392,8 @@ function checkCwdParity(claimsCwd, runtimeCwd, mode, policy) {
 
 // src/hooks/factcheck/config.ts
 var import_os3 = require("os");
+init_loader();
+init_config_dir();
 var DEFAULT_FACTCHECK_POLICY = {
   enabled: false,
   mode: "quick",
@@ -4884,6 +5200,7 @@ function inferPhase(tasks) {
 
 // src/team/runtime-v2.ts
 init_team_name();
+init_model_contract();
 init_tmux_session();
 
 // src/team/dispatch-queue.ts
@@ -5376,12 +5693,11 @@ async function spawnV2Worker(opts) {
     OMC_TEAM_LEADER_CWD: opts.cwd
   };
   const resolvedBinaryPath = opts.resolvedBinaryPaths[opts.agentType] ?? resolveValidatedBinaryPath(opts.agentType);
+  const contract = getContract(opts.agentType);
   const modelForAgent = (() => {
-    if (opts.agentType === "codex") {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_CODEX_MODEL || process.env.OMC_CODEX_DEFAULT_MODEL || void 0;
-    }
-    if (opts.agentType === "gemini") {
-      return process.env.OMC_EXTERNAL_MODELS_DEFAULT_GEMINI_MODEL || process.env.OMC_GEMINI_DEFAULT_MODEL || void 0;
+    if (contract.hints?.modelEnvPrefix) {
+      const envFallback = `OMC_EXTERNAL_MODELS_DEFAULT_${contract.hints.modelEnvPrefix.replace("OMC_", "")}_MODEL`;
+      return process.env[envFallback] || process.env[`${contract.hints.modelEnvPrefix}_DEFAULT_MODEL`] || void 0;
     }
     return resolveClaudeWorkerModel();
   })();
@@ -5430,7 +5746,7 @@ async function spawnV2Worker(opts) {
       if (usePromptMode) {
         return { ok: true, transport: "prompt_stdin", reason: "prompt_mode_launch_args" };
       }
-      if (opts.agentType === "gemini") {
+      if (contract.hints?.needsTrustConfirm) {
         const confirmed = await notifyPaneWithRetry2(opts.sessionName, paneId, "1");
         if (!confirmed) {
           return { ok: false, transport: "tmux_send_keys", reason: "worker_notify_failed:trust-confirm" };
@@ -5450,7 +5766,7 @@ async function spawnV2Worker(opts) {
       startupFailureReason: dispatchOutcome.reason
     };
   }
-  if (opts.agentType === "claude") {
+  if (contract.hints?.startupWaitStrategy === "evidence-file") {
     const settled = await waitForWorkerStartupEvidence(
       opts.teamName,
       opts.workerName,

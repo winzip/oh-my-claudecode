@@ -19,7 +19,7 @@ import { sanitizeName, isWorkerAlive, killWorkerPanes, buildWorkerStartCommand, 
 import { TeamPaths, absPath } from './state-paths.js';
 // ── Environment gate ──────────────────────────────────────────────────────────
 const OMC_TEAM_SCALING_ENABLED_ENV = 'OMC_TEAM_SCALING_ENABLED';
-const CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
+const BUILTIN_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
 export function isScalingEnabled(env = process.env) {
     const raw = env[OMC_TEAM_SCALING_ENABLED_ENV];
     if (!raw)
@@ -33,10 +33,11 @@ function assertScalingEnabled(env = process.env) {
     }
 }
 function asCliAgentType(agentType) {
-    if (CLI_AGENT_TYPES.has(agentType)) {
+    if (BUILTIN_CLI_AGENT_TYPES.has(agentType)) {
         return agentType;
     }
-    throw new Error(`Unknown agent type: ${agentType}. Supported: ${Array.from(CLI_AGENT_TYPES).join(', ')}`);
+    // Accept plugin-registered types too
+    return agentType;
 }
 // ── Scale Up ──────────────────────────────────────────────────────────────────
 /**

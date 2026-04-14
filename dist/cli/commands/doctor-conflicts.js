@@ -9,6 +9,8 @@ import { isOmcHook } from '../../installer/index.js';
 import { colors } from '../utils/formatting.js';
 import { listBuiltinSkillNames } from '../../features/builtin-skills/skills.js';
 import { inspectUnifiedMcpRegistrySync } from '../../installer/mcp-registry.js';
+import { getRegisteredTypes, isBuiltinType, isCliAvailable, getContract } from '../../team/model-contract.js';
+import { ensurePluginsLoaded } from '../../plugins/index.js';
 /**
  * Collect hook entries from a single settings.json file.
  */
@@ -274,6 +276,42 @@ export function checkConfigIssues() {
     return { unknownFields };
 }
 /**
+ * Check CLI agent availability for both built-in and plugin types.
+ */
+export function checkCliPlugins() {
+    const types = getRegisteredTypes();
+    const builtin = [];
+    const plugins = [];
+    // Eagerly load plugins
+    try {
+        ensurePluginsLoaded();
+    }
+    catch { /* plugins module not available */ }
+    for (const type of getRegisteredTypes()) {
+        const available = (() => {
+            try {
+                return isCliAvailable(type);
+            }
+            catch {
+                return false;
+            }
+        })();
+        if (isBuiltinType(type)) {
+            builtin.push({ type, available });
+        }
+        else {
+            const binary = (() => { try {
+                return getContract(type).binary;
+            }
+            catch {
+                return 'unknown';
+            } })();
+            plugins.push({ type, binary, available });
+        }
+    }
+    return { types, builtin, plugins };
+}
+/**
  * Run complete conflict check
  */
 export function runConflictCheck() {
@@ -282,6 +320,7 @@ export function runConflictCheck() {
     const legacySkills = checkLegacySkills();
     const envFlags = checkEnvFlags();
     const configIssues = checkConfigIssues();
+    const cliPlugins = checkCliPlugins();
     const mcpRegistrySync = inspectUnifiedMcpRegistrySync();
     // Determine if there are actual conflicts
     const hasConflicts = hookConflicts.some(h => !h.isOmc) || // Non-OMC hooks present
@@ -300,6 +339,7 @@ export function runConflictCheck() {
         legacySkills,
         envFlags,
         configIssues,
+        cliPlugins,
         mcpRegistrySync,
         hasConflicts
     };
@@ -401,6 +441,23 @@ export function formatReport(report, json) {
         }
         lines.push('');
     }
+    // CLI Agents (built-in + plugins)
+    lines.push(colors.bold('🤖 CLI Agents'));
+    lines.push('');
+    for (const item of report.cliPlugins.builtin) {
+        const status = item.available ? colors.green('✓') : colors.red('✗');
+        lines.push(`  ${status} ${item.type.padEnd(12)} ${colors.gray('built-in')}`);
+    }
+    if (report.cliPlugins.plugins.length > 0) {
+        for (const item of report.cliPlugins.plugins) {
+            const status = item.available ? colors.green('✓') : colors.yellow('⚠');
+            lines.push(`  ${status} ${item.type.padEnd(12)} ${colors.gray(`plugin (${item.binary})`)}`);
+        }
+    }
+    else {
+        lines.push(`  ${colors.gray('No CLI plugins installed')}`);
+    }
+    lines.push('');
     // Unified MCP registry sync
     lines.push(colors.bold('🧩 Unified MCP Registry'));
     lines.push('');

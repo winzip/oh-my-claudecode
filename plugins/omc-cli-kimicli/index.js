@@ -5,7 +5,7 @@
  * Implements the full CliAgentContract interface with behavioral hints.
  */
 
-const contract = {
+module.exports = {
   agentType: 'kimicli',
   binary: 'kimi-cli',
   installInstructions: 'Install Kimi CLI: npm install -g @anthropic/kimi-cli',
@@ -13,7 +13,7 @@ const contract = {
   promptModeFlag: '-p',
   hints: {
     modelEnvPrefix: 'OMC_KIMICLI',
-    startupWaitStrategy: 'prompt-mode' as const,
+    startupWaitStrategy: 'prompt-mode',
     workerGuidanceOverride: [
       '### Agent-Type Guidance (kimicli)',
       '- Use concise commands and report progress to leader-fixed after each step.',
@@ -22,15 +22,14 @@ const contract = {
     ].join('\n'),
   },
 
-  buildLaunchArgs(model?: string, extraFlags: string[] = []): string[] {
-    const args: string[] = [];
+  buildLaunchArgs(model, extraFlags) {
+    extraFlags = extraFlags || [];
+    const args = [];
     if (model) args.push('--model', model);
     return [...args, ...extraFlags];
   },
 
-  parseOutput(rawOutput: string): string {
+  parseOutput(rawOutput) {
     return rawOutput.trim();
   },
 };
-
-module.exports = contract;

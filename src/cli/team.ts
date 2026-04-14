@@ -12,6 +12,7 @@ import { monitorTeam, resumeTeam, shutdownTeam } from '../team/runtime.js';
 import { readTeamConfig } from '../team/monitor.js';
 import { isProcessAlive } from '../platform/index.js';
 import { getGlobalOmcStatePath } from '../utils/paths.js';
+import { ensurePluginsLoaded, getRegisteredTypes } from '../plugins/index.js';
 
 const JOB_ID_PATTERN = /^omc-[a-z0-9]{1,16}$/;
 const VALID_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
@@ -19,7 +20,7 @@ const VALID_CLI_AGENT_TYPES = new Set(['claude', 'codex', 'gemini']);
 function isValidCliAgentType(token: string): boolean {
   if (VALID_CLI_AGENT_TYPES.has(token)) return true;
   try {
-    const { getRegisteredTypes } = require('../plugins/index.js') as { getRegisteredTypes: () => string[] };
+    ensurePluginsLoaded();
     return getRegisteredTypes().includes(token);
   } catch {
     return false;
